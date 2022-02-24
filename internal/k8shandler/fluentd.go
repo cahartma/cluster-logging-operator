@@ -64,6 +64,8 @@ const (
 	metricsVolumeValue         = "/etc/fluent/metrics"
 	tmp                        = "tmp"
 	tmpValue                   = "/tmp"
+	webidentitytoken           = "projected-sts-token"
+	webidentitytokenValue      = "/var/run/secrets/openshift/serviceaccount"
 )
 
 // useOldRemoteSyslogPlugin checks if old plugin (docebo/fluent-plugin-remote-syslog) is to be used for sending syslog or new plugin (dlackty/fluent-plugin-remote_syslog) is to be used
@@ -159,6 +161,7 @@ func newFluentdPodSpec(cluster *logging.ClusterLogging, trustedCABundleCM *v1.Co
 		{Name: filebufferstorage, MountPath: filebufferstorageValue},
 		{Name: metricsVolumeName, ReadOnly: true, MountPath: metricsVolumeValue},
 		{Name: tmp, MountPath: tmpValue},
+		{Name: webidentitytoken, MountPath: webidentitytokenValue},
 	}
 
 	exporterContainer.VolumeMounts = []v1.VolumeMount{
@@ -249,6 +252,7 @@ func newFluentdPodSpec(cluster *logging.ClusterLogging, trustedCABundleCM *v1.Co
 			{Name: filebufferstorage, VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: filebufferstorageValue}}},
 			{Name: metricsVolumeName, VolumeSource: v1.VolumeSource{Secret: &v1.SecretVolumeSource{SecretName: constants.CollectorMetricSecretName}}},
 			{Name: tmp, VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{Medium: v1.StorageMediumMemory}}},
+			{Name: webidentitytoken, VolumeSource: v1.VolumeSource{Projected: &v1.ProjectedVolumeSource{Sources: []v1.VolumeProjection{{ServiceAccountToken: &v1.ServiceAccountTokenProjection{Audience: "openshift", Path: "token"}}}}}},
 		},
 		collectionSpec.Logs.FluentdSpec.NodeSelector,
 		tolerations,

@@ -427,17 +427,24 @@ func verifySecretKeysForTLS(output *logging.OutputSpec, conds logging.NamedCondi
 	}
 	return true
 }
+
 func verifySecretKeysForCloudwatch(output *logging.OutputSpec, conds logging.NamedConditions, secret *corev1.Secret) bool {
 	log.V(3).Info("V")
 	fail := func(c status.Condition) bool {
 		conds.Set(output.Name, c)
 		return false
 	}
+
+	// TODO: refactor yuck
 	hasID := len(secret.Data[constants.AWSAccessKeyID]) > 0
 	hasKey := len(secret.Data[constants.AWSSecretAccessKey]) > 0
-	missingMessage := "aws_access_key_id and aws_secret_access_key are required"
-	if !hasID || !hasKey {
-		return fail(condMissing(missingMessage))
+	hasRole := len(secret.Data[constants.AWSAssumeRoleArn]) > 0
+	hasTokenFile := len(secret.Data[constants.AWSWebIdTokenFile]) > 0
+
+	if (!hasID || !hasKey) && (!hasRole || !hasTokenFile) {
+		idAndKey := constants.AWSAccessKeyID + " and " + constants.AWSSecretAccessKey
+		roleAndToken := constants.AWSAssumeRoleArn + " and " + constants.AWSWebIdTokenFile
+		return fail(condMissing("Either (" + idAndKey + ") or (" + roleAndToken + ") are required"))
 	}
 	return true
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	logging "github.com/openshift/cluster-logging-operator/apis/logging/v1"
+	"github.com/openshift/cluster-logging-operator/internal/constants"
 	. "github.com/openshift/cluster-logging-operator/internal/generator"
 	. "github.com/openshift/cluster-logging-operator/internal/generator/fluentd/elements"
 	"github.com/openshift/cluster-logging-operator/internal/generator/fluentd/helpers"
@@ -51,7 +52,6 @@ log_group_name_key cw_group_name
 log_stream_name_key cw_stream_name
 remove_log_stream_name_key true
 remove_log_group_name_key true
-auto_create_stream true
 concurrency 2
 {{compose_one .SecurityConfig}}
 include_time_key true
@@ -97,9 +97,18 @@ func OutputConf(bufspec *logging.FluentdBufferSpec, secret *corev1.Secret, o log
 }
 
 func SecurityConfig(o logging.OutputSpec, secret *corev1.Secret) Element {
+	// TODO: update?
+	// Now have option for role and token, so need to find which one is used in secret
+	if security.HasRoleAndTokenPath(secret) {
+		return AWSKey{
+			KeyRoleArn:          security.SecretPath(o.Secret.Name, constants.AWSAssumeRoleArn),
+			KeyWebIdentityToken: security.SecretPath(o.Secret.Name, constants.AWSWebIdTokenFile),
+		}
+	}
+
 	return AWSKey{
-		KeyIDPath: security.SecretPath(o.Secret.Name, "aws_access_key_id"),
-		KeyPath:   security.SecretPath(o.Secret.Name, "aws_secret_access_key"),
+		KeyIDPath: security.SecretPath(o.Secret.Name, constants.AWSAccessKeyID),
+		KeyPath:   security.SecretPath(o.Secret.Name, constants.AWSSecretAccessKey),
 	}
 }
 

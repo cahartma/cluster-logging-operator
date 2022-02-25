@@ -30,7 +30,7 @@ const (
 	DeprecatedSaslOverSSL = "sasl_over_ssl"         // Kafka
 	AWSSecretAccessKey    = "aws_secret_access_key" //nolint:gosec
 	AWSAccessKeyID        = "aws_access_key_id"
-	AWSAssumeRoleArn      = "role_arn"
+	AWSRoleArn            = "role_arn"
 	AWSWebIdTokenFile     = "web_identity_token_file"
 )
 const (

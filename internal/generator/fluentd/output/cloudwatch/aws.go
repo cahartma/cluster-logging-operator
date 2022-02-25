@@ -1,8 +1,8 @@
 package cloudwatch
 
 type AWSKey struct {
-	KeyIDPath           string
-	KeyPath             string
+	KeyID               string
+	KeySecret           string
 	KeyRoleArn          string
 	KeyWebIdentityToken string
 }
@@ -12,7 +12,7 @@ func (a AWSKey) Name() string {
 }
 
 func (a AWSKey) Template() string {
-	// Is the role populated in the secret
+	// First check for the role key in the secret
 	if len(a.KeyRoleArn) > 0 {
 		return `{{define "` + a.Name() + `" -}}
 <web_identity_credentials>
@@ -22,9 +22,9 @@ func (a AWSKey) Template() string {
 </web_identity_credentials>
 {{end}}`
 	}
-	// Use id and key
+	// Use ID/Secret
 	return `{{define "` + a.Name() + `" -}}
-aws_key_id "#{open({{ .KeyIDPath }},'r') do |f|f.read.strip end}"
-aws_sec_key "#{open({{ .KeyPath }},'r') do |f|f.read.strip end}"
+aws_key_id "#{open({{ .KeyID }},'r') do |f|f.read.strip end}"
+aws_sec_key "#{open({{ .KeySecret }},'r') do |f|f.read.strip end}"
 {{end}}`
 }

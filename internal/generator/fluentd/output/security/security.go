@@ -56,8 +56,8 @@ func HasPassphrase(secret *corev1.Secret) bool {
 	return HasKeys(secret, constants.Passphrase)
 }
 
-func HasRoleAndTokenPath(secret *corev1.Secret) bool {
-	return HasKeys(secret, constants.AWSAssumeRoleArn, constants.AWSWebIdTokenFile)
+func HasRoleAndWebIdToken(secret *corev1.Secret) bool {
+	return HasKeys(secret, constants.AWSRoleArn, constants.AWSWebIdTokenFile)
 }
 
 // GetKey if found return value and ok=true, else ok=false

@@ -435,16 +435,27 @@ func verifySecretKeysForCloudwatch(output *logging.OutputSpec, conds logging.Nam
 		return false
 	}
 
-	// TODO: refactor yuck
-	hasID := len(secret.Data[constants.AWSAccessKeyID]) > 0
-	hasKey := len(secret.Data[constants.AWSSecretAccessKey]) > 0
-	hasRole := len(secret.Data[constants.AWSAssumeRoleArn]) > 0
+	// Ensure we have secrets for valid cloudwatch config
+	hasKeyID := len(secret.Data[constants.AWSAccessKeyID]) > 0
+	hasSecretKey := len(secret.Data[constants.AWSSecretAccessKey]) > 0
+	hasRole := len(secret.Data[constants.AWSRoleArn]) > 0
 	hasTokenFile := len(secret.Data[constants.AWSWebIdTokenFile]) > 0
-
-	if (!hasID || !hasKey) && (!hasRole || !hasTokenFile) {
-		idAndKey := constants.AWSAccessKeyID + " and " + constants.AWSSecretAccessKey
-		roleAndToken := constants.AWSAssumeRoleArn + " and " + constants.AWSWebIdTokenFile
-		return fail(condMissing("Either (" + idAndKey + ") or (" + roleAndToken + ") are required"))
+	switch {
+	// Role/Token check first
+	case hasRole && !hasTokenFile:
+		return fail(condMissing("auth keys: cannot have %v without %v", constants.AWSRoleArn, constants.AWSWebIdTokenFile))
+	case !hasRole && hasTokenFile:
+		return fail(condMissing("auth keys: cannot have %v without %v", constants.AWSWebIdTokenFile, constants.AWSRoleArn))
+	// ID/Secret check
+	case hasKeyID && !hasSecretKey:
+		return fail(condMissing("auth keys: cannot have %v without %v", constants.AWSAccessKeyID, constants.AWSSecretAccessKey))
+	case !hasKeyID && hasSecretKey:
+		return fail(condMissing("auth keys: cannot have %v without %v", constants.AWSSecretAccessKey, constants.AWSAccessKeyID))
+	// None are present
+	case !hasKeyID && !hasSecretKey && !hasRole && !hasTokenFile:
+		idAndSecret := constants.AWSAccessKeyID + " and " + constants.AWSSecretAccessKey
+		roleAndToken := constants.AWSRoleArn + " and " + constants.AWSWebIdTokenFile
+		return fail(condMissing("auth keys: required keys are either (%v) or (%v)", idAndSecret, roleAndToken))
 	}
 	return true
 }

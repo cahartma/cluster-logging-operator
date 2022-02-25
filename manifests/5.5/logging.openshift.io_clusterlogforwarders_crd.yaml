@@ -163,8 +163,8 @@ spec:
                       description: "Cloudwatch provides configuration for the output type `cloudwatch` \n
                         The cloudwatch output recognizes the following authentication keys in the Secret: \n
                         \t`aws_access_key_id`: AWS access key ID  \t`aws_secret_access_key`: AWS secret access key \n
-                        Or for sts-enabled clusters use the following keys: \n
-                        \t`role_arn`: AWS role to assume \t`web_identity_token_file`: AWS web identity token file"
+                        Or for sts-enabled clusters use the following key: \n
+                        \t`role_arn`: AWS role to assume \t"
                       properties:
                         groupBy:
                           description: GroupBy defines the strategy for grouping logstreams

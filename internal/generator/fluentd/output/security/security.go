@@ -56,10 +56,6 @@ func HasPassphrase(secret *corev1.Secret) bool {
 	return HasKeys(secret, constants.Passphrase)
 }
 
-func HasRoleAndWebIdToken(secret *corev1.Secret) bool {
-	return HasKeys(secret, constants.AWSRoleArn, constants.AWSWebIdTokenFile)
-}
-
 // GetKey if found return value and ok=true, else ok=false
 func GetKey(secret *corev1.Secret, key string) (data []byte, ok bool) {
 	if secret == nil {

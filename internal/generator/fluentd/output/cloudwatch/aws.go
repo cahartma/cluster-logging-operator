@@ -18,7 +18,7 @@ func (a AWSKey) Template() string {
 <web_identity_credentials>
   role_session_name fluentd-log-forwarding
   role_arn "#{open({{ .KeyRoleArn }},'r') do |f|f.read.strip end}"
-  web_identity_token_file "#{open({{ .KeyWebIdentityToken }},'r') do |f|f.read.strip end}"
+  web_identity_token_file "` + a.KeyWebIdentityToken + `"
 </web_identity_credentials>
 {{end}}`
 	}

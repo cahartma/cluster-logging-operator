@@ -26,14 +26,15 @@ const (
 
 	// Output-specific keys
 
-	SharedKey             = "shared_key"            // fluent forward
-	DeprecatedSaslOverSSL = "sasl_over_ssl"         // Kafka
-	AWSSecretAccessKey    = "aws_secret_access_key" //nolint:gosec
-	AWSAccessKeyID        = "aws_access_key_id"
-	AWSRoleToAssumeKey    = "role_arn"                                  // secret key used for fluentd config
-	WebIdentityTokenName  = "sts-sa-token"                              // token name for pod
-	WebIdentityTokenPath  = "/var/run/secrets/openshift/serviceaccount" // location for mounted token
-	WebIdentityTokenFile  = "token"                                     // file containing token relative to mount
+	SharedKey                   = "shared_key"            // fluent forward
+	DeprecatedSaslOverSSL       = "sasl_over_ssl"         // Kafka
+	AWSSecretAccessKey          = "aws_secret_access_key" //nolint:gosec
+	AWSAccessKeyID              = "aws_access_key_id"
+	AWSCredentialsKey           = "credentials"                               // key to expect for sts-formatted secret
+	AWSRoleSessionName          = "cluster-logging"                           // identifier for role logging session
+	AWSWebIdentityTokenName     = "sts-sa-token"                              // token name for pod
+	AWSWebIdentityTokenMount    = "/var/run/secrets/openshift/serviceaccount" // default location for token volume mount
+	AWSWebIdentityTokenFilePath = "token"                                     // file containing token relative to mount
 )
 const (
 	SingletonName = "instance"

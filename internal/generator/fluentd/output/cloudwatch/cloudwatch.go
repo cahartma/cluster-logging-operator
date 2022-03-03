@@ -97,11 +97,13 @@ func OutputConf(bufspec *logging.FluentdBufferSpec, secret *corev1.Secret, o log
 }
 
 func SecurityConfig(o logging.OutputSpec, secret *corev1.Secret) Element {
-	// First check if it has the role key
-	if security.HasKeys(secret, constants.AWSRoleToAssumeKey) {
+	// First check for credentials key in the case of sts-enabled cluster
+	if security.HasAwsCredentialsKey(secret) {
+		mountPath, filePath := security.ParseIdentityToken(secret)
 		return AWSKey{
-			KeyRoleArn:          security.SecretPath(o.Secret.Name, constants.AWSRoleToAssumeKey),
-			KeyWebIdentityToken: constants.WebIdentityTokenPath + "/" + constants.WebIdentityTokenFile,
+			KeyRoleArn:          security.ParseRoleArn(secret),
+			KeyRoleSessionName:  constants.AWSRoleSessionName,
+			KeyWebIdentityToken: mountPath + "/" + filePath,
 		}
 	}
 	// Use ID/Secret

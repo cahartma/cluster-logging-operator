@@ -4,6 +4,7 @@ type AWSKey struct {
 	KeyID               string
 	KeySecret           string
 	KeyRoleArn          string
+	KeyRoleSessionName  string
 	KeyWebIdentityToken string
 }
 
@@ -16,9 +17,9 @@ func (a AWSKey) Template() string {
 	if len(a.KeyRoleArn) > 0 {
 		return `{{define "` + a.Name() + `" -}}
 <web_identity_credentials>
-  role_session_name fluentd-log-forwarding
-  role_arn "#{open({{ .KeyRoleArn }},'r') do |f|f.read.strip end}"
-  web_identity_token_file "` + a.KeyWebIdentityToken + `"
+  role_arn "{{ .KeyRoleArn }}"
+  web_identity_token_file "{{ .KeyWebIdentityToken }}"
+  role_session_name {{ .KeyRoleSessionName }}
 </web_identity_credentials>
 {{end}}`
 	}

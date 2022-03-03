@@ -11,6 +11,7 @@ import (
 	logging "github.com/openshift/cluster-logging-operator/apis/logging/v1"
 	"github.com/openshift/cluster-logging-operator/internal/constants"
 	"github.com/openshift/cluster-logging-operator/internal/generator"
+	"github.com/openshift/cluster-logging-operator/internal/generator/fluentd/output/security"
 	"github.com/openshift/cluster-logging-operator/internal/status"
 	"github.com/openshift/cluster-logging-operator/internal/url"
 	corev1 "k8s.io/api/core/v1"
@@ -438,19 +439,22 @@ func verifySecretKeysForCloudwatch(output *logging.OutputSpec, conds logging.Nam
 	// Ensure we have secrets for valid cloudwatch config
 	hasKeyID := len(secret.Data[constants.AWSAccessKeyID]) > 0
 	hasSecretKey := len(secret.Data[constants.AWSSecretAccessKey]) > 0
-	hasRole := len(secret.Data[constants.AWSRoleToAssumeKey]) > 0
+	hasCredentialsKey := security.HasAwsCredentialsKey(secret)
+	hasRoleArn := len(security.ParseRoleArn(secret)) > 0
 	switch {
-	// Role is the first check
-	case hasRole:
+	case hasCredentialsKey: // Sts secret format is the first check
+		if !hasRoleArn {
+			return fail(condMissing("auth keys: a 'role_arn' key is required that begins with 'arn:aws:iam::'"))
+		}
 		return true
 	case hasKeyID && !hasSecretKey:
 		return fail(condMissing("auth keys: cannot have %v without %v", constants.AWSAccessKeyID, constants.AWSSecretAccessKey))
 	case !hasKeyID && hasSecretKey:
 		return fail(condMissing("auth keys: cannot have %v without %v", constants.AWSSecretAccessKey, constants.AWSAccessKeyID))
-	// None are present
-	case !hasKeyID && !hasSecretKey:
+	case !hasKeyID && !hasSecretKey: // None of the keys are found
 		idAndSecret := "'" + constants.AWSAccessKeyID + "' and '" + constants.AWSSecretAccessKey + "'"
-		return fail(condMissing("auth keys: required keys are either (%v) or ('%v') for sts-enabled clusters", idAndSecret, constants.AWSRoleToAssumeKey))
+		roleAndTokenMessage := "'" + constants.AWSCredentialsKey + "' with a 'role_arn' that begins with 'arn:aws:iam::'"
+		return fail(condMissing("auth keys: required keys are either (%v) or for sts-enabled clusters ('%v')", idAndSecret, roleAndTokenMessage))
 	}
 	return true
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/ViaQ/logerr/log"
 	logging "github.com/openshift/cluster-logging-operator/apis/logging/v1"
 	"github.com/openshift/cluster-logging-operator/internal/constants"
+	"github.com/openshift/cluster-logging-operator/internal/generator/fluentd/output/security"
 	"github.com/openshift/cluster-logging-operator/internal/utils"
 	"github.com/openshift/cluster-logging-operator/internal/utils/comparators/daemonsets"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -75,7 +76,7 @@ func (clusterRequest *ClusterLoggingRequest) useOldRemoteSyslogPlugin() bool {
 	return found && enabled == "enabled"
 }
 
-func newFluentdPodSpec(cluster *logging.ClusterLogging, trustedCABundleCM *v1.ConfigMap, pipelineSpec logging.ClusterLogForwarderSpec) v1.PodSpec {
+func newFluentdPodSpec(cluster *logging.ClusterLogging, trustedCABundleCM *v1.ConfigMap, pipelineSpec logging.ClusterLogForwarderSpec, secret *v1.Secret) v1.PodSpec {
 	collectionSpec := logging.CollectionSpec{}
 	if cluster.Spec.Collection != nil {
 		collectionSpec = *cluster.Spec.Collection
@@ -159,7 +160,6 @@ func newFluentdPodSpec(cluster *logging.ClusterLogging, trustedCABundleCM *v1.Co
 		{Name: filebufferstorage, MountPath: filebufferstorageValue},
 		{Name: metricsVolumeName, ReadOnly: true, MountPath: metricsVolumeValue},
 		{Name: tmp, MountPath: tmpValue},
-		{Name: constants.WebIdentityTokenName, MountPath: constants.WebIdentityTokenPath},
 	}
 
 	exporterContainer.VolumeMounts = []v1.VolumeMount{
@@ -181,6 +181,16 @@ func newFluentdPodSpec(cluster *logging.ClusterLogging, trustedCABundleCM *v1.Co
 	for _, name := range secretNames {
 		path := fmt.Sprintf("/var/run/ocp-collector/secrets/%s", name)
 		fluentdContainer.VolumeMounts = append(fluentdContainer.VolumeMounts, v1.VolumeMount{Name: name, ReadOnly: true, MountPath: path})
+	}
+
+	// Add projected volume mount for sts formatted AWS secret
+	if security.HasAwsCredentialsKey(secret) {
+		mountPath, _ := security.ParseIdentityToken(secret)
+		fluentdContainer.VolumeMounts = append(fluentdContainer.VolumeMounts, v1.VolumeMount{
+			Name:      constants.AWSWebIdentityTokenName,
+			ReadOnly:  true,
+			MountPath: mountPath,
+		})
 	}
 
 	addTrustedCAVolume := false
@@ -250,13 +260,34 @@ func newFluentdPodSpec(cluster *logging.ClusterLogging, trustedCABundleCM *v1.Co
 			{Name: filebufferstorage, VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: filebufferstorageValue}}},
 			{Name: metricsVolumeName, VolumeSource: v1.VolumeSource{Secret: &v1.SecretVolumeSource{SecretName: constants.CollectorMetricSecretName}}},
 			{Name: tmp, VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{Medium: v1.StorageMediumMemory}}},
-			{Name: constants.WebIdentityTokenName, VolumeSource: v1.VolumeSource{Projected: &v1.ProjectedVolumeSource{Sources: []v1.VolumeProjection{{ServiceAccountToken: &v1.ServiceAccountTokenProjection{Audience: "openshift", Path: constants.WebIdentityTokenFile}}}}}},
 		},
 		collectionSpec.Logs.FluentdSpec.NodeSelector,
 		tolerations,
 	)
 	for _, name := range secretNames {
 		fluentdPodSpec.Volumes = append(fluentdPodSpec.Volumes, v1.Volume{Name: name, VolumeSource: v1.VolumeSource{Secret: &v1.SecretVolumeSource{SecretName: name}}})
+	}
+
+	// Add projected volume mount for sts-formatted aws secret
+	if security.HasAwsCredentialsKey(secret) {
+		_, filePath := security.ParseIdentityToken(secret)
+		fluentdPodSpec.Volumes = append(fluentdPodSpec.Volumes,
+			v1.Volume{
+				Name: constants.AWSWebIdentityTokenName,
+				VolumeSource: v1.VolumeSource{
+					Projected: &v1.ProjectedVolumeSource{
+						Sources: []v1.VolumeProjection{
+							{
+								ServiceAccountToken: &v1.ServiceAccountTokenProjection{
+									Audience: "openshift",
+									Path:     filePath,
+								},
+							},
+						},
+					},
+				},
+			},
+		)
 	}
 
 	if addTrustedCAVolume {
@@ -286,10 +317,19 @@ func newFluentdPodSpec(cluster *logging.ClusterLogging, trustedCABundleCM *v1.Co
 }
 
 func (clusterRequest *ClusterLoggingRequest) createOrUpdateFluentdDaemonset(fluentdTrustBundle *v1.ConfigMap, pipelineConfHash string) (err error) {
+	// TODO: can we get away without error handling since we're past the config normalization?
+	// Bring the secret into context
+	var secret *v1.Secret
+	for _, o := range clusterRequest.ForwarderSpec.Outputs {
+		if o.Type == logging.OutputTypeCloudwatch {
+			secret, _ = clusterRequest.GetSecret(o.Secret.Name)
+			break
+		}
+	}
 
 	cluster := clusterRequest.Cluster
 
-	fluentdPodSpec := newFluentdPodSpec(cluster, fluentdTrustBundle, clusterRequest.ForwarderSpec)
+	fluentdPodSpec := newFluentdPodSpec(cluster, fluentdTrustBundle, clusterRequest.ForwarderSpec, secret)
 
 	fluentdDaemonset := NewDaemonSet(constants.CollectorName, cluster.Namespace, constants.CollectorName, constants.CollectorName, fluentdPodSpec)
 	fluentdDaemonset.Spec.Template.Spec.Containers[0].Env = updateEnvVar(v1.EnvVar{Name: "COLLECTOR_CONF_HASH", Value: pipelineConfHash}, fluentdDaemonset.Spec.Template.Spec.Containers[0].Env)

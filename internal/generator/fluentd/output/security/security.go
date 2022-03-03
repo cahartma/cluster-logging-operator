@@ -104,11 +104,12 @@ func GetFromSecret(secret *corev1.Secret, name string) string {
 	return ""
 }
 
+// ParseRoleArn search for 'arn:aws:iam:: in the credentials string and return string up to end of line
 func ParseRoleArn(secret *corev1.Secret) string {
 	credentials := GetFromSecret(secret, constants.AWSCredentialsKey)
-	if credentials != "" { // parse the role_arn from the credentials string
+	if credentials != "" {
 		roleIndex := strings.Index(credentials, "arn:aws:iam::")
-		if roleIndex != -1 { // found the role index
+		if roleIndex != -1 { // found the role arn string
 			roleArn := strings.Split(credentials[roleIndex:], "\n")
 			return roleArn[0]
 		}
@@ -116,9 +117,11 @@ func ParseRoleArn(secret *corev1.Secret) string {
 	return ""
 }
 
-func ParseIdentityToken(secret *corev1.Secret) (string, string) {
+// ParseIdentityToken split credentials string at 'web_identity_token_file = ' and return everything after
+// Return volume mount path and token file path, or default values if exact separator key is not found
+func ParseIdentityToken(secret *corev1.Secret) (mountPath, filePath string) {
 	credentials := GetFromSecret(secret, constants.AWSCredentialsKey)
-	if credentials != "" { // parse token mount path and file from credentials string
+	if credentials != "" {
 		split := strings.Split(credentials, "web_identity_token_file = ")
 		if split[0] != credentials { // found the separator
 			tokenMountPathWithFile := split[1]

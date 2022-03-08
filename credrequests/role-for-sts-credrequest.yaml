@@ -1,0 +1,25 @@
+---
+apiVersion: cloudcredential.openshift.io/v1
+kind: CredentialsRequest
+metadata:
+  name: role-for-sts-credrequest
+  namespace: openshift-logging
+spec:
+  providerSpec:
+    apiVersion: cloudcredential.openshift.io/v1
+    kind: AWSProviderSpec
+    statementEntries:
+      - action:
+          - logs:PutLogEvents
+          - logs:CreateLogGroup
+          - logs:PutRetentionPolicy
+          - logs:CreateLogStream
+          - logs:DescribeLogGroups
+          - logs:DescribeLogStreams
+        effect: Allow
+        resource: arn:aws:logs:*:*:*
+  secretRef:
+    name: role-for-sts
+    namespace: openshift-logging
+  serviceAccountNames:
+    - logcollector

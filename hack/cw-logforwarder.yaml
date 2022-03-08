@@ -1,0 +1,24 @@
+apiVersion: logging.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: instance
+  namespace: openshift-logging
+spec:
+  outputs:
+    - name: cw
+      type: cloudwatch
+      cloudwatch:
+        groupBy: logType
+        groupPrefix: cluster-logging
+        region: us-east-2
+      secret:
+        name: role-for-sts
+  pipelines:
+    - name: all-logs
+      inputRefs:
+        - infrastructure
+        - audit
+        - application
+      outputRefs:
+        - cw
+        - default

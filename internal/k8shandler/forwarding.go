@@ -11,7 +11,7 @@ import (
 	logging "github.com/openshift/cluster-logging-operator/apis/logging/v1"
 	"github.com/openshift/cluster-logging-operator/internal/constants"
 	"github.com/openshift/cluster-logging-operator/internal/generator"
-	"github.com/openshift/cluster-logging-operator/internal/generator/fluentd/output/security"
+	"github.com/openshift/cluster-logging-operator/internal/generator/fluentd/output/cloudwatch"
 	"github.com/openshift/cluster-logging-operator/internal/status"
 	"github.com/openshift/cluster-logging-operator/internal/url"
 	corev1 "k8s.io/api/core/v1"
@@ -439,8 +439,8 @@ func verifySecretKeysForCloudwatch(output *logging.OutputSpec, conds logging.Nam
 	// Ensure we have secrets for valid cloudwatch config
 	hasKeyID := len(secret.Data[constants.AWSAccessKeyID]) > 0
 	hasSecretKey := len(secret.Data[constants.AWSSecretAccessKey]) > 0
-	hasCredentialsKey := security.HasAwsCredentialsKey(secret)
-	hasRoleArn := len(security.ParseRoleArn(secret)) > 0
+	hasCredentialsKey := cloudwatch.HasAwsCredentialsKey(secret)
+	hasRoleArn := len(cloudwatch.ParseRoleArn(secret)) > 0
 	switch {
 	case hasCredentialsKey: // Sts secret format is the first check
 		if !hasRoleArn {

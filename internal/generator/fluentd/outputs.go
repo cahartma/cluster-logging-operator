@@ -40,6 +40,22 @@ func Outputs(clspec *logging.ClusterLoggingSpec, secrets map[string]*corev1.Secr
 			outputs = MergeElements(outputs, loki.Conf(bufspec, secret, o, op))
 		}
 	}
-
 	return outputs
+}
+
+// GetVolumesFromSecrets Append any additional volumes based on attributes of the secret and forwarder spec
+func GetVolumesFromSecrets(secrets map[string]*corev1.Secret, clfspec *logging.ClusterLogForwarderSpec) (mount corev1.VolumeMount, volume corev1.Volume) {
+	for _, o := range clfspec.Outputs {
+		secret := secrets[o.Name]
+		switch o.Type {
+		case logging.OutputTypeElasticsearch:
+		case logging.OutputTypeFluentdForward:
+		case logging.OutputTypeKafka:
+		case logging.OutputTypeLoki:
+		case logging.OutputTypeSyslog:
+		case logging.OutputTypeCloudwatch:
+			mount, volume = cloudwatch.AppendVolumeActions(secret)
+		}
+	}
+	return
 }

@@ -3,7 +3,6 @@ package security
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/openshift/cluster-logging-operator/internal/constants"
 	corev1 "k8s.io/api/core/v1"
@@ -57,10 +56,6 @@ func HasPassphrase(secret *corev1.Secret) bool {
 	return HasKeys(secret, constants.Passphrase)
 }
 
-func HasAwsCredentialsKey(secret *corev1.Secret) bool {
-	return HasKeys(secret, constants.AWSCredentialsKey)
-}
-
 // GetKey if found return value and ok=true, else ok=false
 func GetKey(secret *corev1.Secret, key string) (data []byte, ok bool) {
 	if secret == nil {
@@ -102,32 +97,4 @@ func GetFromSecret(secret *corev1.Secret, name string) string {
 		return string(secret.Data[name])
 	}
 	return ""
-}
-
-// ParseRoleArn search for 'arn:aws:iam:: in the credentials string and return string up to end of line
-func ParseRoleArn(secret *corev1.Secret) string {
-	credentials := GetFromSecret(secret, constants.AWSCredentialsKey)
-	if credentials != "" {
-		roleIndex := strings.Index(credentials, "arn:aws:iam::")
-		if roleIndex != -1 { // found the role arn string
-			roleArn := strings.Split(credentials[roleIndex:], "\n")
-			return roleArn[0]
-		}
-	}
-	return ""
-}
-
-// ParseIdentityToken split credentials string at 'web_identity_token_file = ' and return everything after
-// Return volume mount path and token file path, or default values if exact separator key is not found
-func ParseIdentityToken(secret *corev1.Secret) (mountPath, filePath string) {
-	credentials := GetFromSecret(secret, constants.AWSCredentialsKey)
-	if credentials != "" {
-		split := strings.Split(credentials, "web_identity_token_file = ")
-		if split[0] != credentials { // found the separator
-			tokenMountPathWithFile := split[1]
-			return filepath.Dir(tokenMountPathWithFile), filepath.Base(tokenMountPathWithFile)
-		}
-	}
-	// Use default
-	return constants.AWSWebIdentityTokenMount, constants.AWSWebIdentityTokenFilePath
 }

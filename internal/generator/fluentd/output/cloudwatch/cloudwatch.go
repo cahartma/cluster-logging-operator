@@ -2,6 +2,7 @@ package cloudwatch
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	logging "github.com/openshift/cluster-logging-operator/apis/logging/v1"
@@ -98,11 +99,11 @@ func OutputConf(bufspec *logging.FluentdBufferSpec, secret *corev1.Secret, o log
 
 func SecurityConfig(o logging.OutputSpec, secret *corev1.Secret) Element {
 	// First check for credentials key, indicating a sts-enabled cluster
-	if security.HasAwsCredentialsKey(secret) {
+	if HasAwsCredentialsKey(secret) {
 		// Parse values from the credentials string
-		mountPath, filePath := security.ParseIdentityToken(secret)
+		mountPath, filePath := ParseIdentityToken(secret)
 		return AWSKey{
-			KeyRoleArn:          security.ParseRoleArn(secret),
+			KeyRoleArn:          ParseRoleArn(secret),
 			KeyRoleSessionName:  constants.AWSRoleSessionName,
 			KeyWebIdentityToken: mountPath + "/" + filePath,
 		}
@@ -160,4 +161,63 @@ func LogGroupName(o logging.OutputSpec) string {
 		}
 	}
 	return ""
+}
+
+func HasAwsCredentialsKey(secret *corev1.Secret) bool {
+	return security.HasKeys(secret, constants.AWSCredentialsKey)
+}
+
+// ParseRoleArn search for 'arn:aws:iam:: in the credentials string and return string up to end of line
+func ParseRoleArn(secret *corev1.Secret) string {
+	credentials := security.GetFromSecret(secret, constants.AWSCredentialsKey)
+	if credentials != "" {
+		roleIndex := strings.Index(credentials, "arn:aws:iam::")
+		if roleIndex != -1 { // found the role arn string
+			roleArn := strings.Split(credentials[roleIndex:], "\n")
+			return roleArn[0]
+		}
+	}
+	return ""
+}
+
+// ParseIdentityToken split credentials string at 'web_identity_token_file = ' and return everything after
+// Return volume mount path and token file path, or default values if exact separator key is not found
+func ParseIdentityToken(secret *corev1.Secret) (mountPath, filePath string) {
+	credentials := security.GetFromSecret(secret, constants.AWSCredentialsKey)
+	if credentials != "" {
+		split := strings.Split(credentials, "web_identity_token_file = ")
+		if split[0] != credentials { // found the separator
+			tokenMountPathWithFile := split[1]
+			return filepath.Dir(tokenMountPathWithFile), filepath.Base(tokenMountPathWithFile)
+		}
+	}
+	// Use default
+	return constants.AWSWebIdentityTokenMount, constants.AWSWebIdentityTokenFilePath
+}
+
+func AppendVolumeActions(secret *corev1.Secret) (mount corev1.VolumeMount, volume corev1.Volume) {
+	if HasAwsCredentialsKey(secret) {
+		mountPath, filePath := ParseIdentityToken(secret)
+		mount = corev1.VolumeMount{
+			Name:      constants.AWSWebIdentityTokenName,
+			ReadOnly:  true,
+			MountPath: mountPath,
+		}
+		volume = corev1.Volume{
+			Name: constants.AWSWebIdentityTokenName,
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: []corev1.VolumeProjection{
+						{
+							ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+								Audience: "openshift",
+								Path:     filePath,
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+	return
 }

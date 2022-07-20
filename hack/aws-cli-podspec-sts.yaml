@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+  labels:
+    app: sts-pod
+  name: sts-pod
+  namespace: openshift-logging
+spec:
+  containers:
+    - image: amazon/aws-cli
+      command: ["/bin/sh"]
+      args: ["-c", "mkdir /root/.aws; cat /var/run/secrets/cloud/credentials > /root/.aws/config; sleep 86400"]
+      imagePullPolicy: IfNotPresent
+      name: manual-sts
+      env:
+        - name: AWS_ROLE_SESSION_NAME
+          value: test-sts-session
+        - name: AWS_REGION
+          value: us-east-2
+      ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+      volumeMounts:
+        - mountPath: /var/run/secrets/cloud
+          name: sts-secret
+          readOnly: false
+        - mountPath: /var/run/secrets/openshift/serviceaccount
+          name: bound-sa-token
+          readOnly: true
+  dnsPolicy: ClusterFirst
+  serviceAccount: sa-manual-sts #<--The pod must run with the sa
+  serviceAccountName: sa-manual-sts
+  volumes:
+    - name: sts-secret
+      secret:
+        defaultMode: 420
+        optional: false
+        secretName: sts-secret #<--This volume mount the config
+    - name: bound-sa-token #<--The second volume mount the web identity token
+      projected:
+        defaultMode: 420
+        sources:
+          - serviceAccountToken:
+              audience: openshift
+              expirationSeconds: 3600
+              path: token

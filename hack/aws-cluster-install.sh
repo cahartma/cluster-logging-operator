@@ -8,15 +8,57 @@
 
 set -ueo pipefail
 
-# colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-TAN='\033[0;33m'
-AQUA='\033[0;36m'
-NC='\033[0m'
+# colors can be commented out if unwanted
+bold=$(tput bold)
+red=$(tput setaf 1)
+green=$(tput setaf 2)
+yellow=$(tput setaf 3)
 blue=$(tput setaf 4)
 cyan=$(tput setaf 6)
 reset=$(tput sgr0)
+
+#Color    Value
+#black     0 
+#red       1 
+#green     2 
+#yellow    3 
+#blue      4 
+#magenta   5 
+#cyan      6 
+#white     7 
+
+# leave these
+read_color() {
+  echo
+  read -p "${bold}$1${reset}"
+}
+
+echo_bold() {
+  echo
+  echo "${bold}$1${reset}"
+}
+
+echo_green() {
+  echo "${green}$1${reset}"
+}
+
+echo_yellow() {
+  echo "${yellow}$1${reset}"
+}
+
+echo_cyan() {
+  echo "${cyan}$1${reset}"
+}
+
+echo_blue() {
+  echo "${blue}$1${reset}"
+}
+
+#RED='\033[0;31m'
+#GREEN='\033[0;32m'
+#TAN='\033[0;33m'
+#AQUA='\033[0;36m'
+#NC='\033[0m'
 
 ME=$(basename "$0")
 KERBEROS_USERNAME=${KERBEROS_USERNAME:-$(whoami)}
@@ -25,12 +67,12 @@ CLUSTER_DIR=${CLUSTER_DIR:-${TMP_DIR}/installer}
 CCO_UTILITY_DIR=${CCO_UTILITY_DIR:-${TMP_DIR}/cco}
 CCO_RESOURCE_NAME=${KERBEROS_USERNAME}-$(date +'%m%d')
 CLUSTER_NAME=${KERBEROS_USERNAME}-$(date +'%m%d')cluster$(date +'%H%M')
-RELEASE_IMAGE=${RELEASE_IMAGE:-"quay.io/openshift-release-dev/ocp-release:4.9.12-x86_64"}
 REGION=${REGION:-"us-east-2"}
 SSH_KEY="$(cat $HOME/.ssh/id_ed25519.pub)"
 PULL_SECRET="$(tr -d '[:space:]' < $HOME/.docker/config.json)"
-ROLE_NAME=${ROLE_NAME:-"role-for-sts"}
-AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-$(aws sts get-caller-identity --query Account)}
+SECRET_NAME=${SECRET_NAME:-"vector-cw-secret"}
+COLLECTOR=${COLLECTOR:-"vector"}
+
 
 DEBUG='info'
 CONFIG_ONLY=${CONFIG_ONLY:-0}
@@ -47,21 +89,28 @@ usage() {
 	Flags:
       --cleanup            Destroy existing cluster if necessary and exit
   -d, --dir string         Install Assets directory (default "${CLUSTER_DIR}")
-	  -c, --config             Create install config only
-	  -l, --logging-role       Create logging resources for cloudwatch sts
-	  -f, --logforwarding      Create an instance of logforwarding only (assuming secrets already setup)
+	  -o, --config-only        Create install config only
+	  -i, --create-instance    Create a cluster logging instance with vector
+	  -f, --logforwarding      Create an instance of logforwarding
+	  -c, --collector          Specify collector (default "${COLLECTOR}" or "fluentd")
+	  -s, --secret-name        Specify AWS secret name (default "${SECRET_NAME}")
 	  -r, --region             Specify AWS region (default "${REGION}")
 	  -d, --debug              Use debug log level for install
 	  -h, --help               Help for ${ME}
 	EOF
-	echo ${reset}
+  echo ${reset}
+
 #  for (( i = 30; i < 38; i++ )); do
 #    echo -e "\033[0;"$i"m Normal: (0;$i); \033[1;"$i"m Light: (1;$i)";
 #  done
 #  echo -e "$NC"
+printf '\e[%smX ' {30..37} 0; echo           ### foreground
+printf '\e[%smX ' {40..47} 0; echo           ### background
+echo
 }
 
 main() {
+  CREATE_INSTANCE=0
   CLEANUP_ONLY=0
   while [[ $# -gt 0 ]]; do
     key="$1"
@@ -80,7 +129,17 @@ main() {
         shift # past argument
         shift # past value
         ;;
-      -c|--config)
+      -c|--collector)
+        COLLECTOR="$2"
+        shift # past argument
+        shift # past value
+        ;;
+      -s|--secret-name)
+        SECRET_NAME="$2"
+        shift # past argument
+        shift # past value
+        ;;
+      -o|--config)
         CONFIG_ONLY=1
         shift # past argument
         ;;
@@ -88,8 +147,9 @@ main() {
         DEBUG='debug'
         shift # past argument
         ;;
-      -l|--logging-role)
-        create_logging_role && exit 0
+      -i|--create-instance)
+        CREATE_INSTANCE=1
+        shift # past argument
         ;;
       -f|--logforwarding)
         cluster_log_forwarder && exit 0
@@ -98,7 +158,7 @@ main() {
         usage && exit 0
         ;;
       *)
-        echo -e "${RED}Unknown flag $1${NC}" > /dev/stderr
+        echo -e "${red}Unknown flag $1${reset}" > /dev/stderr
         echo
         usage
         exit 1
@@ -111,39 +171,30 @@ main() {
       exit 0
   fi
 
+  if [[ "${CREATE_INSTANCE}" -eq 1 ]]; then
+      echo -e "creating vector preview of clusterlogging"
+      clusterlogging_instance | oc apply -f -
+      echo
+      exit 0
+  fi
   setup
 
   # exit after setup if config only
   [ $CONFIG_ONLY -eq 1 ] && echo && exit 0
 
-  echo "Extracting credential requests"
-  oc adm release extract --credentials-requests --cloud=aws ${RELEASE_IMAGE} \
-    --to=${CCO_UTILITY_DIR}/credrequests
-  echo
-  echo "Creating IAM resources"
-  cd ${CCO_UTILITY_DIR}
-  ccoctl aws create-all --region=${REGION} \
-    --name=${CCO_RESOURCE_NAME} \
-    --credentials-requests-dir=${CCO_UTILITY_DIR}/credrequests
-  echo -e "Creating installer manifests"
-  openshift-install create manifests --dir ${CLUSTER_DIR}
-  echo "Copying manifest files to install directory"
-  cp ${CCO_UTILITY_DIR}/manifests/* ${CLUSTER_DIR}/manifests/
-  echo "Copying the private key"
-  cp -a ${CCO_UTILITY_DIR}/tls ${CLUSTER_DIR}
-
   echo -e "\nSetup is complete and ready to create cluster..."
-
   create_cluster
 }
 
 # Remove existing files and create install config
 setup() {
-  echo -e "\n${GREEN}Reminder: VPN must be connected before we start the installer${NC}"
+  echo
+  echo_cyan "Reminder: VPN must be connected before we start the installer"
   confirm
 
   if [[ -d ${CLUSTER_DIR} || -d ${CCO_UTILITY_DIR} ]]; then
-      echo -e "\n${AQUA}Existing install or cco utility files need to removed from ${TMP_DIR}${NC}"
+      echo
+      echo_cyan "Existing install or cco utility files need to removed from ${TMP_DIR}"
       confirm
       [ -d ${CLUSTER_DIR} ] && rm -r ${CLUSTER_DIR} && echo "Removing ${CLUSTER_DIR}"
       [ -d ${CCO_UTILITY_DIR} ] && rm -r ${CCO_UTILITY_DIR} && echo "Removing ${CCO_UTILITY_DIR}"
@@ -160,7 +211,6 @@ make_config() {
 	---
 	apiVersion: v1
 	baseDomain: devcluster.openshift.com
-	credentialsMode: Manual
 	compute:
 	- architecture: amd64
 	  hyperthreading: Enabled
@@ -228,71 +278,54 @@ confirm() {
       exit 0
     fi
     echo
+
+#    while true; do
+#      read -r -p "Do you want to continue (y/N)? " answer
+#      case $answer in
+#          [Yy]* ) break;;
+#          [Nn]* ) echo "Okay, Exiting." && exit;;
+#          * ) echo "Please answer y or N";;
+#      esac
+#    done
 }
 
-create_logging_role() {
-  echo -e "\nReady to create logging role and secret"
-  confirm
-  request_dir="credrequests"
-
-  echo "Creating logging credrequest at ${request_dir}"
-  mkdir -p ${request_dir}
-
-	cat <<-EOF > ${request_dir}/${ROLE_NAME}-credrequest.yaml
----
-apiVersion: cloudcredential.openshift.io/v1
-kind: CredentialsRequest
+clusterlogging_instance() {
+  cat <<-EOF
+apiVersion: "logging.openshift.io/v1"
+kind: "ClusterLogging"
 metadata:
-  name: ${ROLE_NAME}-credrequest
-  namespace: openshift-logging
+  name: "instance"
+  namespace: "openshift-logging"
 spec:
-  providerSpec:
-    apiVersion: cloudcredential.openshift.io/v1
-    kind: AWSProviderSpec
-    statementEntries:
-      - action:
-          - logs:PutLogEvents
-          - logs:CreateLogGroup
-          - logs:PutRetentionPolicy
-          - logs:CreateLogStream
-          - logs:DescribeLogGroups
-          - logs:DescribeLogStreams
-        effect: Allow
-        resource: arn:aws:logs:*:*:*
-  secretRef:
-    name: ${ROLE_NAME}
-    namespace: openshift-logging
-  serviceAccountNames:
-    - logcollector
+  managementState: Managed
+  logStore:
+    type: "elasticsearch"
+    elasticsearch:
+      nodeCount: 1
+      resources:
+        requests:
+          limits: 2Gi
+      redundancyPolicy: "ZeroRedundancy"
+  visualization:
+    type: "kibana"
+    kibana:
+      replicas: 1
+  collection:
+    logs:
+      type: ${COLLECTOR}
+      fluentd: {}
 EOF
-
-  echo -e "\nCreating role at AWS and output file for applying our secret"
-  ccoctl aws create-iam-roles --name=${CCO_RESOURCE_NAME} --region=${REGION} \
-    --credentials-requests-dir=${request_dir} \
-    --output-dir=output \
-    --identity-provider-arn=arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${CCO_RESOURCE_NAME}-oidc.s3.${REGION}.amazonaws.com
-
-  echo -e "\nLogging in to cluster"
-  export KUBECONFIG=${CLUSTER_DIR}/auth/kubeconfig
-  oc login -u kubeadmin -p $(cat ${CLUSTER_DIR}/auth/kubeadmin-password)
-
-  echo -e "\nCreating secret based on new role and OIDC bucket"
-  oc create ns openshift-logging
-  oc apply -f output/manifests/openshift-logging-${ROLE_NAME}-credentials.yaml
-
-  echo
-  exit 0
 }
 
 cluster_log_forwarder() {
   echo -e "\nReady to install logfowarding resources"
   confirm
 
-  echo -e "\nApplying secret for ${ROLE_NAME}"
-  oc apply -f output/manifests/openshift-logging-${ROLE_NAME}-credentials.yaml
+  echo -e "\nApplying secret for ${SECRET_NAME}"
+  oc apply -f hack/${SECRET_NAME}.yaml
 
   echo -e "\nCreating logforwarder instance resource file"
-  cat <<-EOF > hack/cw-logforwarder-$(date +'%m%d').yaml
+  cat <<-EOF > hack/cw-logforwarder.yaml
 ---
 apiVersion: "logging.openshift.io/v1"
 kind: ClusterLogForwarder
@@ -308,7 +341,7 @@ spec:
         groupPrefix: ${CCO_RESOURCE_NAME}
         region: ${REGION}
       secret:
-        name: ${ROLE_NAME}
+        name: ${SECRET_NAME}
   pipelines:
     - name: all-logs
       inputRefs:
@@ -320,45 +353,51 @@ spec:
 EOF
 
   echo -e "\nApply logforwarder yaml file"
-  oc apply -f hack/cw-logforwarder-$(date +'%m%d').yaml
+  oc apply -f hack/cw-logforwarder.yaml
 
   echo
   exit 0
 }
-
 
 post_install() {
   _notify_send -t 5000 \
     "OCP cluster ${CLUSTER_NAME} " \
     "Created successfully"
 
-  echo -e "\nSuccessfully deployed cluster!"
+  echo_bold "Successfully deployed cluster!"
 
-  echo -e "\n--- Setup ---\n"
-  echo -e "${AQUA}export KUBECONFIG=${CLUSTER_DIR}/auth/kubeconfig${NC}"
-  echo -e "${AQUA}oc login -u kubeadmin -p \$(cat ${CLUSTER_DIR}/auth/kubeadmin-password)${NC}"
+#  echo_bold "--- Setup ---"
+#  echo_cyan "export KUBECONFIG=${CLUSTER_DIR}/auth/kubeconfig"
+#  echo_cyan "oc login -u kubeadmin -p \$(cat ${CLUSTER_DIR}/auth/kubeadmin-password)"
+#
+#  echo_bold "--- Cleanup Commands ---"
+#  echo_green "${ME} --cleanup"
+#
+#  echo_bold "Alternatively, to clean up ccoctl resources after destroying cluster..."
+#  echo_green "ccoctl aws delete --name=${CCO_RESOURCE_NAME} --region=${REGION}"
+#
+#  echo_bold "Cloudwatch log groups..."
+##  echo_green "aws logs describe-log-groups --query 'logGroups[?starts_with(logGroupName,\`${CCO_RESOURCE_NAME}\`)].logGroupName' --region ${REGION} --output text"
+#  echo_green "aws logs describe-log-groups --log-group-name-prefix '${CCO_RESOURCE_NAME}' --region ${REGION} --output text"
+#  echo_green "aws logs delete-log-group --region ${REGION} --log-group-name ${CCO_RESOURCE_NAME}- "
 
-  echo -e "\n--- Create log forwarding resources for cloudwatch roles (IRSA) ---\n"
-  echo -e "${TAN}${ME} -l (--logging-role)${NC} to create AWS resources and OCP secret"
-  echo -e "${TAN}${ME} -f (--logforwarding)${NC} to create logforwarder instance"
+  echo_bold "----"
+  echo_blue "export KUBECONFIG=${CLUSTER_DIR}/auth/kubeconfig && "
+  echo_blue "oc login -u kubeadmin -p \$(cat ${CLUSTER_DIR}/auth/kubeadmin-password)"
+  echo_bold "----"
+#  echo_blue "make clean && make deploy-elasticsearch-operator && make deploy-image && make deploy-catalog && make install"
+  echo_blue "make clean && make deploy"
+  echo_bold "----"
+  echo_blue "oc apply -f hack/cr.yaml && echo 'sleeping...' && "
+  echo_blue "sleep 90 && oc apply -f hack/cw-secret-test.yaml && oc apply -f hack/cw-logforwarder.yaml"
 
-  echo -e "\n--- Cleanup Commands ---\n"
-  echo -e "${GREEN}${ME} --cleanup${NC}"
-
-  echo -e "\nAlternatively, to clean up ccoctl resources after destroying cluster..."
-  echo -e "${GREEN}ccoctl aws delete --name=${CCO_RESOURCE_NAME} --region=${REGION}${NC}"
-
-  echo -e "\nCloudwatch log groups..."
-  echo -e "${GREEN}aws logs describe-log-groups --query 'logGroups[?starts_with(logGroupName,\`${CCO_RESOURCE_NAME}\`)].logGroupName' --region ${REGION} --output text ${NC}"
-  echo -e "To delete (append each log name): ${GREEN}aws logs delete-log-group --region ${REGION} --log-group-name ${CCO_RESOURCE_NAME}- ${NC}"
-
-  echo -e "\n----- Done -----\n"
+  echo_bold "----- Done -----"
   exit 0
 }
 
 destroy_cluster() {
 
-	echo -e "\nDestroying cluster under ${CLUSTER_DIR}..."
+	echo_bold "Destroying cluster under ${CLUSTER_DIR}..."
   confirm
 
 	if openshift-install --dir "${CLUSTER_DIR}" destroy cluster; then
@@ -374,12 +413,12 @@ destroy_cluster() {
 
 	cleanup_cco_utility_resources
 
-  echo -e "\n--- Done ---\n"
+  echo_bold "--- Done ---"
   exit 0
 }
 
 cleanup_cco_utility_resources() {
-  echo -e "\nCleaning up cco resources at AWS"
+  echo_bold "Cleaning up cco resources at AWS"
 
   if ccoctl aws delete --name=${CCO_RESOURCE_NAME} --region=${REGION}; then
     _notify_send -t 5000 \
@@ -400,7 +439,7 @@ _notify_send() {
 # abort with an error message (not currently used)
 abort() {
 	read -r line func file <<< "$(caller 0)"
-	echo -e "${RED}ERROR in $file:$func:$line: $1${NC}" > /dev/stderr
+	echo -e "${red}ERROR in $file:$func:$line: $1${reset}" > /dev/stderr
 	echo "Bye"
 	exit 1
 }

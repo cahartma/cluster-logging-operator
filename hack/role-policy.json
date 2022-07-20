@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "logs:PutLogEvents",
+        "logs:CreateLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:CreateLogStream",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:logs:*:*:*"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::01234567890:oidc-provider/rh-test-oidc.s3.us-east-2.amazonaws.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "rh-test-oidc.s3.us-east-2.amazonaws.com:sub": [
+            "system:serviceaccount:openshift-logging:logcollector"
+          ]
+        }
+      }
+    }
+  ]
+}

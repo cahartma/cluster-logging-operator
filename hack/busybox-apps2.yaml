@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: testing-apps2
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox-apps
+  namespace: testing-apps2
+spec:
+  containers:
+    - name: local-test-log-foo
+      image: docker.io/library/busybox:1.31.1
+      args: ["sh", "-c", "i=0; while true; do echo $i: Test foo$i; i=$((i+1)) ; sleep 2; done"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox-apps2
+  namespace: testing-apps2
+spec:
+  containers:
+    - name: another-foo-local-test
+      image: docker.io/library/busybox:1.31.1
+      args: [ "sh", "-c", "i=0; while true; do echo $i: Test foo$i; i=$((i+1)) ; sleep 2; done" ]

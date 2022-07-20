@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: another-test-app
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox-app2
+  namespace: another-test-app
+spec:
+  containers:
+    - name: another-log-generator
+      image: docker.io/library/busybox:1.31.1
+      args: ["sh", "-c", "i=0; while true; do echo $i: Testing foo$i; i=$((i+1)) ; sleep 2; done"]

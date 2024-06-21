@@ -40,9 +40,9 @@ if .log_source == "%s" {
 		FixLogLevel,
 		HandleEventRouterLog,
 		RemovePartial,
-		RemoveFile,
-		RemoveSourceType,
-		RemoveLogSource,
+		//RemoveFile,  // needed for otlp transforms below
+		// RemoveSourceType, // need for otlp??
+		//RemoveLogSource, // needed for otlp transforms below
 		RemoveStream,
 		RemovePodIPs,
 		RemoveNodeLabels,

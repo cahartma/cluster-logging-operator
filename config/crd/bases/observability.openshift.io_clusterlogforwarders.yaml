@@ -1915,6 +1915,115 @@ spec:
                     name:
                       description: Name used to refer to the output from a `pipeline`.
                       type: string
+                    otlp:
+                      description: Otlp provided configuration for sending OTLP/HTTP
+                        with JSON-encoded Protobuf payload requests. https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding
+                      properties:
+                        authentication:
+                          description: Authentication sets credentials for authenticating
+                            the requests.
+                          properties:
+                            password:
+                              description: Password to use for authenticating requests.
+                              nullable: true
+                              properties:
+                                key:
+                                  description: Name of the key used to get the value
+                                    from the referenced Secret.
+                                  type: string
+                                secret:
+                                  description: Use Secret if the value should be sourced
+                                    from a Secret in the same namespace.
+                                  properties:
+                                    name:
+                                      description: 'Name of the referent. More info:
+                                        https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        TODO: Add other useful fields. apiVersion,
+                                        kind, uid?'
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              required:
+                              - key
+                              - secret
+                              type: object
+                            token:
+                              description: Token specifies a bearer token to be used
+                                for authenticating requests.
+                              nullable: true
+                              properties:
+                                from:
+                                  description: From is the source from where to find
+                                    the token
+                                  enum:
+                                  - secret
+                                  - serviceAccountToken
+                                  type: string
+                                secret:
+                                  description: Use Secret if the value should be sourced
+                                    from a Secret in the same namespace.
+                                  properties:
+                                    key:
+                                      description: Name of the key used to get the
+                                        value from the referenced Secret.
+                                      type: string
+                                    name:
+                                      description: Name of secret
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                              required:
+                              - from
+                              type: object
+                            username:
+                              description: Username to use for authenticating requests.
+                              nullable: true
+                              properties:
+                                key:
+                                  description: Name of the key used to get the value
+                                    from the referenced Secret.
+                                  type: string
+                                secret:
+                                  description: Use Secret if the value should be sourced
+                                    from a Secret in the same namespace.
+                                  properties:
+                                    name:
+                                      description: 'Name of the referent. More info:
+                                        https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        TODO: Add other useful fields. apiVersion,
+                                        kind, uid?'
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              required:
+                              - key
+                              - secret
+                              type: object
+                          type: object
+                        headers:
+                          additionalProperties:
+                            type: string
+                          description: 'Headers specify optional headers to be sent
+                            with the request default value is: {"Content-Type"="application/json"}'
+                          type: object
+                        timeout:
+                          description: Timeout specifies the Http request timeout
+                            in seconds. If not set, 10secs is used.
+                          type: integer
+                        url:
+                          description: "URL to send log records to. \n An absolute
+                            URL, with a scheme. Valid schemes depend on `type`. Special
+                            schemes `tcp`, `tls`, `udp` and `udps` are used for types
+                            that have no scheme of their own. For example, to send
+                            syslog records using secure UDP: \n { type: syslog, url:
+                            udps://syslog.example.com:1234 } \n Basic TLS is enabled
+                            if the URL scheme requires it (for example 'https' or
+                            'tls'). The 'username@password' part of `url` is ignored."
+                          type: string
+                      required:
+                      - url
+                      type: object
                     rateLimit:
                       description: Limit imposes a limit in records-per-second on
                         the total aggregate rate of logs forwarded to this output
@@ -2314,6 +2423,7 @@ spec:
                       - googleCloudLogging
                       - splunk
                       - syslog
+                      - otlp
                       type: string
                   required:
                   - name

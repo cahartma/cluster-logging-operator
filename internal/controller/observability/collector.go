@@ -1,6 +1,8 @@
 package observability
 
 import (
+	"context"
+	"fmt"
 	log "github.com/ViaQ/logerr/v2/log/static"
 	obs "github.com/openshift/cluster-logging-operator/api/observability/v1"
 	internalcontext "github.com/openshift/cluster-logging-operator/internal/api/context"
@@ -19,6 +21,10 @@ import (
 	"github.com/openshift/cluster-logging-operator/internal/reconcile"
 	"github.com/openshift/cluster-logging-operator/internal/tls"
 	"github.com/openshift/cluster-logging-operator/internal/utils"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"time"
@@ -26,12 +32,10 @@ import (
 
 func ReconcileCollector(context internalcontext.ForwarderContext, pollInterval, timeout time.Duration) (err error) {
 	// TODO LOG-2620: containers violate PodSecurity ? should we still do this or should this be
-	// a pre-req to multi CLF?
-	//// LOG-2620: containers violate PodSecurity
-	//if err = clusterRequest.addSecurityLabelsToNamespace(); err != nil {
-	//	log.Error(err, "Error adding labels to logging Namespace")
-	//	return
-	//}
+	if err = AddSecurityLabelsToNamespace(k8Client, clf.Namespace); err != nil {
+		log.Error(err, "Error adding labels to logging Namespace")
+		return
+	}
 
 	if err = reconcile.SecurityContextConstraints(context.Client, auth.NewSCC()); err != nil {
 		log.V(3).Error(err, "reconcile.SecurityContextConstraints")
@@ -141,4 +145,35 @@ func LogLevel(annotations map[string]string) string {
 		return level
 	}
 	return "warn"
+}
+
+func AddSecurityLabelsToNamespace(k8Client client.Client, namespace string) (err error) {
+	//TODO: fix or remove
+	//if namespace != constants.OpenshiftNS {
+	//	return nil
+	//}
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespace,
+		},
+	}
+
+	key := types.NamespacedName{Name: ns.Name}
+	if err := k8Client.Get(context.TODO(), key, ns); err != nil {
+		return fmt.Errorf("error getting namespace: %w", err)
+	}
+
+	if val := ns.Labels[constants.PodSecurityLabelEnforce]; val != constants.PodSecurityLabelValue {
+		ns.Labels[constants.PodSecurityLabelEnforce] = constants.PodSecurityLabelValue
+		ns.Labels[constants.PodSecurityLabelAudit] = constants.PodSecurityLabelValue
+		ns.Labels[constants.PodSecurityLabelWarn] = constants.PodSecurityLabelValue
+		ns.Labels[constants.PodSecuritySyncLabel] = "false"
+
+		if err := k8Client.Update(context.TODO(), ns); err != nil && !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("error updating namespace: %w", err)
+		}
+		log.V(1).Info("Successfully added pod security labels", "labels", ns.Labels)
+	}
+
+	return nil
 }

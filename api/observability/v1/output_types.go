@@ -23,7 +23,7 @@ import (
 
 // OutputType is used to define the type of output to be created.
 //
-// +kubebuilder:validation:Enum:=azureMonitor;cloudwatch;elasticsearch;http;kafka;loki;lokiStack;googleCloudLogging;splunk;syslog
+// +kubebuilder:validation:Enum:=azureMonitor;cloudwatch;elasticsearch;http;kafka;loki;lokiStack;googleCloudLogging;splunk;syslog;otlp
 type OutputType string
 
 // Output type constants, must match JSON tags of OutputTypeSpec fields.
@@ -38,6 +38,7 @@ const (
 	OutputTypeLokiStack          OutputType = "lokiStack"
 	OutputTypeSplunk             OutputType = "splunk"
 	OutputTypeSyslog             OutputType = "syslog"
+	OutputTypeOtlp               OutputType = "otlp"
 )
 
 var (
@@ -53,6 +54,7 @@ var (
 		OutputTypeLokiStack,
 		OutputTypeSplunk,
 		OutputTypeSyslog,
+		OutputTypeOtlp,
 	}
 )
 
@@ -110,6 +112,9 @@ type OutputSpec struct {
 
 	// +kubebuilder:validation:Optional
 	Syslog *Syslog `json:"syslog,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	Otlp *Otlp `json:"otlp,omitempty"`
 }
 
 // OutputTLSSpec contains options for TLS connections that are agnostic to the output type.
@@ -768,4 +773,26 @@ type Syslog struct {
 	//
 	// +kubebuilder:validation:Optional
 	MsgID string `json:"msgID,omitempty"`
+}
+
+// Otlp provided configuration for sending OTLP/HTTP with JSON-encoded Protobuf payload requests.
+// https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding
+type Otlp struct {
+	URLSpec `json:",inline"`
+
+	// Authentication sets credentials for authenticating the requests.
+	//
+	// +kubebuilder:validation:Optional
+	Authentication *HTTPAuthentication `json:"authentication,omitempty"`
+
+	// Headers specify optional headers to be sent with the request
+	// default value is: {"Content-Type"="application/json"}
+	//
+	// +kubebuilder:validation:Optional
+	Headers map[string]string `json:"headers,omitempty"`
+
+	// Timeout specifies the Http request timeout in seconds. If not set, 10secs is used.
+	//
+	// +kubebuilder:validation:Optional
+	Timeout int `json:"timeout,omitempty"`
 }

@@ -785,6 +785,12 @@ type Otlp struct {
 	// +kubebuilder:validation:Optional
 	Authentication *HTTPAuthentication `json:"authentication,omitempty"`
 
+	// Tuning specs tuning for the output
+	//
+	// +kubebuilder:validation:Optional
+	// +nullable
+	Tuning *HttpTuningSpec `json:"tuning,omitempty"`
+
 	// Headers specify optional headers to be sent with the request
 	// default value is: {"Content-Type"="application/json"}
 	//

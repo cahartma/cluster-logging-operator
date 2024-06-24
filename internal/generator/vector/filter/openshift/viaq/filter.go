@@ -41,8 +41,8 @@ if .log_source == "%s" {
 		HandleEventRouterLog,
 		RemovePartial,
 		//RemoveFile,  // needed for otlp transforms below
-		// RemoveSourceType, // need for otlp??
 		//RemoveLogSource, // needed for otlp transforms below
+		RemoveSourceType,
 		RemoveStream,
 		RemovePodIPs,
 		RemoveNodeLabels,

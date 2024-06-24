@@ -25,17 +25,20 @@ func (r Route) Template() string {
 [transforms.{{.ComponentID}}]
 type = "route"
 inputs = {{.Inputs}}
-route.container = 'exists(.kubernetes)'
-route.journal = '!exists(.kubernetes)'
-# route.container = '.log_source == "container"'
-# route.journal = '.log_source == "node"'
+route.container = '.log_source == "container"'
+route.journal = '.log_source == "node"'
+# route.audit = '.log_type == "audit"'
+route.linux = '.log_source == "auditd"'
+route.kube = '.log_source == "kubeAPI"'
+route.openshift = '.log_source == "openshiftAPI"'
+route.ovn = '.log_source == "ovn"'
 {{end}}
 `
 }
 
-func RouteJournal(id string, inputs []string) Element {
+func RouteBySource(id string, inputs []string) Element {
 	return Route{
-		Desc:        "Route container logs and journal logs separately",
+		Desc:        "Route container, journal, and audit logs separately",
 		ComponentID: id,
 		Inputs:      helpers.MakeInputs(inputs...),
 	}
@@ -100,15 +103,54 @@ merge_strategies.logRecords = "array"
 {{end}}
 `
 }
-func GroupByNode(id string, inputs []string) Element {
-	return Merge{
+
+type Retain struct {
+	ComponentID string
+	Desc        string
+	Inputs      string
+}
+
+func (t Retain) Name() string {
+	return "retainTemplate"
+}
+
+func (t Retain) Template() string {
+	return `{{define "retainTemplate" -}}
+{{if .Desc -}}
+# {{.Desc}}
+{{end -}}
+[transforms.{{.ComponentID}}]
+type = "reduce"
+inputs = {{.Inputs}}
+expire_after_ms = 10000
+max_events = 50
+# node.name is derived from .hostname
+group_by = [".k8s.node.name", "openshift.log.source"]
+merge_strategies.resource = "retain"
+merge_strategies.logRecords = "array"
+{{end}}
+`
+}
+
+func GroupByContainer(id string, inputs []string) Element {
+	return Reduce{
+		Desc:        "Merge container logs and group by namespace, pod, and container",
 		ComponentID: id,
 		Inputs:      helpers.MakeInputs(inputs...),
 	}
 }
 
-func GroupByContainer(id string, inputs []string) Element {
-	return Reduce{
+func GroupByNode(id string, inputs []string) Element {
+	return Merge{
+		Desc:        "Merge node logs and group by resource",
+		ComponentID: id,
+		Inputs:      helpers.MakeInputs(inputs...),
+	}
+}
+
+func GroupByAudit(id string, inputs []string) Element {
+	return Retain{
+		Desc:        "Merge audit logs and group by resource",
 		ComponentID: id,
 		Inputs:      helpers.MakeInputs(inputs...),
 	}
@@ -116,7 +158,7 @@ func GroupByContainer(id string, inputs []string) Element {
 
 func FormatBatch(id string, inputs []string) Element {
 	return elements.Remap{
-		Desc:        "Remap to match OTEL protocol",
+		Desc:        "Remap to match OTLP/HTTP request payload",
 		ComponentID: id,
 		Inputs:      helpers.MakeInputs(inputs...),
 		VRL: strings.TrimSpace(`
@@ -134,13 +176,12 @@ func FormatBatch(id string, inputs []string) Element {
 
 func TransformContainer(id string, inputs []string) Element {
 	return elements.Remap{
-		Desc:        "Normalize container log records to OTLP schema",
+		Desc:        "Normalize container log records to OTLP semantic conventions",
 		ComponentID: id,
 		Inputs:      helpers.MakeInputs(inputs...),
 		VRL: strings.TrimSpace(`
-# OTLP for application and infrastructure 
-# first for container logs
-if .log_type != "audit" && .tag != ".journal.system" {
+# OTLP semantic conventions for application and infrastructure containers 
+if .log_source == "container" {
 	# Included attribute fields
 	meta = [
 	  "kubernetes.pod_name", 
@@ -185,10 +226,11 @@ if .log_type != "audit" && .tag != ".journal.system" {
 			)
 		}
     }
-	# Appending custom "openshift" attributes
+	# Appending "openshift" attributes
 	resource.attributes = append(
 		resource.attributes, 
-		[{"key": "openshift.log.type", "value": {"stringValue": .log_type}}]
+        [{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+        {"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
 	)
 	# transform the record
 	r = {}
@@ -206,14 +248,15 @@ if .log_type != "audit" && .tag != ".journal.system" {
 `),
 	}
 }
+
 func TransformJournal(id string, inputs []string) Element {
 	return elements.Remap{
-		Desc:        "Normalize node log events to OTLP schema",
+		Desc:        "Normalize node log events to OTLP semantic conventions",
 		ComponentID: id,
 		Inputs:      helpers.MakeInputs(inputs...),
 		VRL: strings.TrimSpace(`
-# OTLP for infrastructure journal logs 
-if .log_type == "infrastructure" && .tag == ".journal.system" {
+# OTLP semantic conventions for infrastructure journal logs 
+if .log_source == "node" {
     meta = [
 	  "systemd.t.BOOT_ID",
       "systemd.t.COMM",
@@ -243,8 +286,8 @@ if .log_type == "infrastructure" && .tag == ".journal.system" {
       "SYSTEMD.INVOCATION.ID": "system.invocation.id",
       "SYSTEMD.SLICE": "system.slice",
       "SYSTEMD.UNIT": "system.unit",
-      "SYSLOG.FACILITY": "facility",
-      "SYSLOG.IDENTIFIER": "identifier"
+      "SYSLOG.FACILITY": "syslog.facility",
+      "SYSLOG.IDENTIFIER": "syslog.identifier"
 	}
 	
 	resource.attributes = []
@@ -264,22 +307,17 @@ if .log_type == "infrastructure" && .tag == ".journal.system" {
 		# if not found in replace, then downcase any remaining in the list
         sub_key = downcase(sub_key)
       }
-	  # Add them all to "resource.attributes.syslog"
+	  # Add them all to "resource.attributes"
       resource.attributes = append(
 		resource.attributes,
-		[{"key": "syslog." + sub_key, "value": {"stringValue": get!(.,path)}}]
+		[{"key": sub_key, "value": {"stringValue": get!(.,path)}}]
 	  )
 	}
     # Appending "openshift" attributes
 	resource.attributes = append(
-		resource.attributes, 
-		[{"key": "openshift.log.type", "value": {"stringValue": .log_type}}]
-	)
-    # Appending "openshift" attributes
-	resource.attributes = append(
         resource.attributes, 
         [{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
-        {"key": "openshift.log.tag", "value": {"stringValue": .tag}}]
+        {"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
 	)
 	# Transform into resource log records 
 	r = {}
@@ -293,6 +331,298 @@ if .log_type == "infrastructure" && .tag == ".journal.system" {
 	  "logRecords": r
 	 }
 }
+`),
+	}
+}
+
+//func TransformAudit(id string, inputs []string) Element {
+//	return elements.Remap{
+//		Desc:        "Normalize audit log event to OTLP semantic conventions",
+//		ComponentID: id,
+//		Inputs:      helpers.MakeInputs(inputs...),
+//		VRL: strings.TrimSpace(`
+//# OTLP semantic conventions for audit log events
+//if .log_type == "audit" {
+//	# Included attribute fields
+//	meta = [
+//	  "openshift.cluster_id",
+//	  "hostname",
+//	  "file"
+//	]
+//	replace = {
+//	  "cluster.id": "cluster.uid",
+//	  "hostname": "node.name",
+//	  "file": "logs.file.path"
+//	}
+//	# Create resource attributes based on meta and replaces list
+//	resource.attributes = []
+//	for_each(meta) -> |_,value| {
+//	  sub_key = value
+//	  path = split(value,".")
+//	  # if one or more dots (levels), replace the final underscores with dots
+//	  if length(path) > 1 {
+//		sub_key = replace!(path[-1],"_",".")
+//	  }
+//      # check for matches in replace
+//	  if get!(replace, [sub_key]) != null {
+//		sub_key = string!(get!(replace, [sub_key]))
+//	  }
+//	  # Add all fields to "resource.attributes.k8s"
+//      resource.attributes = append(
+//		resource.attributes,
+//		[{"key": sub_key, "value": {"stringValue": get!(.,path)}}]
+//	  )
+//	}
+//	# Appending custom "openshift" attributes
+//	resource.attributes = append(
+//        resource.attributes,
+//        [{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+//        {"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
+//	)
+//	# transform the record
+//	r = {}
+//	r.timeUnixNano = to_string(to_unix_timestamp(parse_timestamp!(.@timestamp, format:"%+"), unit:"nanoseconds"))
+//	r.observedTimeUnixNano = to_string(to_unix_timestamp(now(), unit:"nanoseconds"))
+//	# Convert syslog severity keyword to number, default to 9 (unknown)
+//	r.severityNumber = to_syslog_severity(.level) ?? 9
+//	r.body = {"stringValue": string!(.message)}
+//	. = {
+//	  "resource": resource,
+//	  "logRecords": r
+//	 }
+//}
+//`),
+//	}
+//}
+
+func TransformAuditHost(id string, inputs []string) Element {
+	return elements.Remap{
+		Desc:        "Normalize audit log record to OTLP semantic conventions",
+		ComponentID: id,
+		Inputs:      helpers.MakeInputs(inputs...),
+		VRL: strings.TrimSpace(`
+# OTLP semantic conventions for auditd linux log records 
+# Included attribute fields
+meta = [
+  "openshift.cluster_id",
+  "hostname",
+  "file"
+]
+replace = {
+  "cluster.id": "cluster.uid",
+  "hostname": "node.name",
+  "file": "logs.file.path"
+}
+# Create resource attributes based on meta and replaces list
+resource.attributes = []
+for_each(meta) -> |_,value| {
+  sub_key = value
+  path = split(value,".")
+  # if one or more dots (levels), replace the final underscores with dots
+  if length(path) > 1 {
+	sub_key = replace!(path[-1],"_",".")
+  }
+  # check for matches in replace
+  if get!(replace, [sub_key]) != null {
+	sub_key = string!(get!(replace, [sub_key]))
+  } 
+  # Add all fields to "resource.attributes.k8s"
+  resource.attributes = append(
+	resource.attributes,
+	[{"key": "k8s." + sub_key, "value": {"stringValue": get!(.,path)}}]
+  )
+}
+# Appending custom "openshift" attributes
+resource.attributes = append(
+	resource.attributes, 
+	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
+)
+# transform the record
+r = {}
+r.timeUnixNano = to_string(to_unix_timestamp(parse_timestamp!(.@timestamp, format:"%+"), unit:"nanoseconds"))
+r.observedTimeUnixNano = to_string(to_unix_timestamp(now(), unit:"nanoseconds"))
+# Convert syslog severity keyword to number, default to 9 (unknown)
+r.severityNumber = to_syslog_severity(.level) ?? 9
+r.body = {"stringValue": string!(.message)}
+. = {
+  "resource": resource,
+  "logRecords": r
+ }
+
+`),
+	}
+}
+func TransformAuditKube(id string, inputs []string) Element {
+	return elements.Remap{
+		Desc:        "Normalize audit log kube record to OTLP semantic conventions",
+		ComponentID: id,
+		Inputs:      helpers.MakeInputs(inputs...),
+		VRL: strings.TrimSpace(`
+# OTLP semantic conventions for audit log kubeAPI records 
+# Included attribute fields
+meta = [
+  "openshift.cluster_id",
+  "hostname",
+  "file"
+]
+replace = {
+  "cluster.id": "cluster.uid",
+  "hostname": "node.name",
+  "file": "logs.file.path"
+}
+# Create resource attributes based on meta and replaces list
+resource.attributes = []
+for_each(meta) -> |_,value| {
+  sub_key = value
+  path = split(value,".")
+  # if one or more dots (levels), replace the final underscores with dots
+  if length(path) > 1 {
+	sub_key = replace!(path[-1],"_",".")
+  }
+  # check for matches in replace
+  if get!(replace, [sub_key]) != null {
+	sub_key = string!(get!(replace, [sub_key]))
+  } 
+  # Add all fields to "resource.attributes.k8s"
+  resource.attributes = append(
+	resource.attributes,
+	[{"key": "k8s." + sub_key, "value": {"stringValue": get!(.,path)}}]
+  )
+}
+# Appending custom "openshift" attributes
+resource.attributes = append(
+	resource.attributes, 
+	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
+)
+# transform the record
+r = {}
+r.timeUnixNano = to_string(to_unix_timestamp(parse_timestamp!(.@timestamp, format:"%+"), unit:"nanoseconds"))
+r.observedTimeUnixNano = to_string(to_unix_timestamp(now(), unit:"nanoseconds"))
+# Convert syslog severity keyword to number, default to 9 (unknown)
+r.severityNumber = to_syslog_severity(.level) ?? 9
+r.body = {"stringValue": string!(.message)}
+. = {
+  "resource": resource,
+  "logRecords": r
+}
+
+`),
+	}
+}
+func TransformAuditOpenshift(id string, inputs []string) Element {
+	return elements.Remap{
+		Desc:        "Normalize audit log openshiftAPI record to OTLP semantic conventions",
+		ComponentID: id,
+		Inputs:      helpers.MakeInputs(inputs...),
+		VRL: strings.TrimSpace(`
+# OTLP semantic conventions for audit log openshiftAPI records 
+# Included attribute fields
+meta = [
+  "openshift.cluster_id",
+  "hostname",
+  "file"
+]
+replace = {
+  "cluster.id": "cluster.uid",
+  "hostname": "node.name",
+  "file": "logs.file.path"
+}
+# Create resource attributes based on meta and replaces list
+resource.attributes = []
+for_each(meta) -> |_,value| {
+  sub_key = value
+  path = split(value,".")
+  # if one or more dots (levels), replace the final underscores with dots
+  if length(path) > 1 {
+	sub_key = replace!(path[-1],"_",".")
+  }
+  # check for matches in replace
+  if get!(replace, [sub_key]) != null {
+	sub_key = string!(get!(replace, [sub_key]))
+  } 
+  # Add all fields to "resource.attributes.k8s"
+  resource.attributes = append(
+	resource.attributes,
+	[{"key": "k8s." + sub_key, "value": {"stringValue": get!(.,path)}}]
+  )
+}
+# Appending custom "openshift" attributes
+resource.attributes = append(
+	resource.attributes, 
+	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
+)
+# transform the record
+r = {}
+r.timeUnixNano = to_string(to_unix_timestamp(parse_timestamp!(.@timestamp, format:"%+"), unit:"nanoseconds"))
+r.observedTimeUnixNano = to_string(to_unix_timestamp(now(), unit:"nanoseconds"))
+# Convert syslog severity keyword to number, default to 9 (unknown)
+r.severityNumber = to_syslog_severity(.level) ?? 9
+r.body = {"stringValue": string!(.message)}
+. = {
+  "resource": resource,
+  "logRecords": r
+ }
+
+`),
+	}
+}
+func TransformAuditOvn(id string, inputs []string) Element {
+	return elements.Remap{
+		Desc:        "Normalize audit log ovn records to OTLP semantic conventions",
+		ComponentID: id,
+		Inputs:      helpers.MakeInputs(inputs...),
+		VRL: strings.TrimSpace(`
+# OTLP semantic conventions for audit log ovn records 
+# Included attribute fields
+meta = [
+  "openshift.cluster_id",
+  "hostname",
+  "file"
+]
+replace = {
+  "cluster.id": "cluster.uid",
+  "hostname": "node.name",
+  "file": "logs.file.path"
+}
+# Create resource attributes based on meta and replaces list
+resource.attributes = []
+for_each(meta) -> |_,value| {
+  sub_key = value
+  path = split(value,".")
+  # if one or more dots (levels), replace the final underscores with dots
+  if length(path) > 1 {
+	sub_key = replace!(path[-1],"_",".")
+  }
+  # check for matches in replace
+  if get!(replace, [sub_key]) != null {
+	sub_key = string!(get!(replace, [sub_key]))
+  } 
+  # Add all fields to "resource.attributes.k8s"
+  resource.attributes = append(
+	resource.attributes,
+	[{"key": "k8s." + sub_key, "value": {"stringValue": get!(.,path)}}]
+  )
+}
+# Appending custom "openshift" attributes
+resource.attributes = append(
+	resource.attributes, 
+	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
+)
+# transform the record
+r = {}
+r.timeUnixNano = to_string(to_unix_timestamp(parse_timestamp!(.@timestamp, format:"%+"), unit:"nanoseconds"))
+r.observedTimeUnixNano = to_string(to_unix_timestamp(now(), unit:"nanoseconds"))
+# Convert syslog severity keyword to number, default to 9 (unknown)
+r.severityNumber = to_syslog_severity(.level) ?? 9
+r.body = {"stringValue": string!(.message)}
+. = {
+  "resource": resource,
+  "logRecords": r
+ }
 `),
 	}
 }

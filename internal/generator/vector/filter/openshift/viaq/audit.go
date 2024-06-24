@@ -46,8 +46,8 @@ if .log_type == "%s" && .log_source == "%s" {
 		strings.Join(helpers.TrimSpaces([]string{
 			ClusterID,
 			//RemoveFile,  // needed for otlp transforms below
-			//RemoveSourceType, // needed for otlp?
 			//RemoveLogSource, // needed for otlp transforms below
+			RemoveSourceType,
 			ParseHostAuditLogs,
 			AddDefaultLogLevel,
 			FixHostname,
@@ -60,12 +60,13 @@ func auditK8sLogs() string {
 if .log_type == "%s" && .log_source == "%s" {
 %s
 }
+
 `, string(obs.InputTypeAudit), obs.AuditSourceKube,
 		strings.Join(helpers.TrimSpaces([]string{
 			ClusterID,
 			//RemoveFile,  // needed for otlp transforms below
-			//RemoveSourceType, // needed for otlp?
 			//RemoveLogSource, // needed for otlp transforms below
+			RemoveSourceType,
 			ParseAndFlatten,
 			FixK8sAuditLevel,
 			FixHostname,
@@ -78,12 +79,13 @@ func auditOpenshiftLogs() string {
 if .log_type == "%s" && .log_source == "%s" {
 %s
 }
+
 `, string(obs.InputTypeAudit), obs.AuditSourceOpenShift,
 		strings.Join(helpers.TrimSpaces([]string{
 			ClusterID,
 			//RemoveFile,  // needed for otlp transforms below
-			//RemoveSourceType, // needed for otlp?
 			//RemoveLogSource, // needed for otlp transforms below
+			RemoveSourceType,
 			ParseAndFlatten,
 			FixOpenshiftAuditLevel,
 			FixHostname,
@@ -96,12 +98,13 @@ func auditOVNLogs() string {
 if .log_type == "%s" && .log_source == "%s" {
 %s
 }
+
 `, string(obs.InputTypeAudit), obs.AuditSourceOVN,
 		strings.Join(helpers.TrimSpaces([]string{
 			ClusterID,
 			//RemoveFile,  // needed for otlp transforms below
-			//RemoveSourceType, // needed for otlp?
 			//RemoveLogSource, // needed for otlp transforms below
+			RemoveSourceType,
 			FixLogLevel,
 			FixHostname,
 			FixTimestampField,

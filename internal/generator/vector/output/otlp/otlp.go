@@ -14,10 +14,10 @@ import (
 )
 
 type Otlp struct {
-	ComponentID string
-	Inputs      string
-	URI         string
-	common.RootMixin
+	ComponentID      string
+	Inputs           string
+	URI              string
+	common.RootMixin //TODO: remove??
 }
 
 func (p Otlp) Name() string {
@@ -39,6 +39,7 @@ encoding.codec = "json"
 `
 }
 
+// TODO: remove this for otlp ?
 func (p *Otlp) SetCompression(algo string) {
 	p.Compression.Value = algo
 }
@@ -54,18 +55,45 @@ func New(id string, o obsv1.OutputSpec, inputs []string, secrets vectorhelpers.S
 	}
 	var els []Element
 	rerouteID := vectorhelpers.MakeID(id, "reroute")
-	transformContainerID := vectorhelpers.MakeID(id, "pre_otlp_container")
-	transformJournalID := vectorhelpers.MakeID(id, "pre_otlp_journal")
+	transformContainerID := vectorhelpers.MakeID(id, "otlp_container")
 	reduceContainerID := vectorhelpers.MakeID(id, "group_by_container")
-	reduceJournalID := vectorhelpers.MakeID(id, "group_by_node")
-	formatID := vectorhelpers.MakeID(id, "post_otlp")
+	transformNodeID := vectorhelpers.MakeID(id, "otlp_node")
+	reduceNodeID := vectorhelpers.MakeID(id, "group_by_node")
+	//transformAuditID := vectorhelpers.MakeID(id, "otlp_audit")
+	reduceAuditID := vectorhelpers.MakeID(id, "group_by_audit")
+	formatID := vectorhelpers.MakeID(id, "final_otlp")
 
-	els = append(els, RouteJournal(rerouteID, inputs))
+	transformAuditHostID := vectorhelpers.MakeID(id, "otlp_audit_linux")
+	transformAuditKubeID := vectorhelpers.MakeID(id, "otlp_audit_kube")
+	transformAuditOpenshiftID := vectorhelpers.MakeID(id, "otlp_audit_openshift")
+	transformAuditOvnID := vectorhelpers.MakeID(id, "otlp_audit_ovn")
+
+	els = append(els, RouteBySource(rerouteID, inputs))
 	els = append(els, TransformContainer(transformContainerID, []string{rerouteID + ".container"}))
 	els = append(els, GroupByContainer(reduceContainerID, []string{transformContainerID}))
-	els = append(els, TransformJournal(transformJournalID, []string{rerouteID + ".journal"}))
-	els = append(els, GroupByNode(reduceJournalID, []string{transformJournalID}))
-	els = append(els, FormatBatch(formatID, []string{reduceContainerID, reduceJournalID}))
+	els = append(els, TransformJournal(transformNodeID, []string{rerouteID + ".journal"}))
+	els = append(els, GroupByNode(reduceNodeID, []string{transformNodeID}))
+	//els = append(els, TransformAudit(transformAuditID, []string{rerouteID + ".audit"}))
+
+	els = append(els, TransformAuditHost(transformAuditHostID, []string{rerouteID + ".linux"}))
+	els = append(els, TransformAuditKube(transformAuditKubeID, []string{rerouteID + ".kube"}))
+	els = append(els, TransformAuditOpenshift(transformAuditOpenshiftID, []string{rerouteID + ".openshift"}))
+	els = append(els, TransformAuditOvn(transformAuditOvnID, []string{rerouteID + ".ovn"}))
+
+	els = append(els, GroupByAudit(reduceAuditID, []string{
+		//transformAuditID,
+		transformAuditHostID,
+		transformAuditKubeID,
+		transformAuditOpenshiftID,
+		transformAuditOvnID,
+	}))
+
+	els = append(els, FormatBatch(formatID, []string{
+		reduceContainerID,
+		reduceNodeID,
+		reduceAuditID,
+		rerouteID + "._unmatched",
+	}))
 
 	sink := Output(id, o, []string{formatID}, secrets, op)
 	if strategy != nil {
@@ -105,6 +133,11 @@ func Request(id string, o obsv1.OutputSpec, strategy common.ConfigStrategy) *com
 	}
 	// required
 	headers["Content-Type"] = "application/json"
+
+	// TODO: does compression need to be set here?  Need to test existing tuning.compression
+	// https://opentelemetry.io/docs/specs/otlp/#otlphttp
+	// The client MAY gzip the content and in that case MUST include “Content-Encoding: gzip” request header.
+	// headers["Content-Encoding"] = "gzip"
 	req.SetHeaders(headers)
 	return req
 }

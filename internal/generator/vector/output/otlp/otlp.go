@@ -1,7 +1,6 @@
 package otlp
 
 import (
-	log "github.com/ViaQ/logerr/v2/log/static"
 	obsv1 "github.com/openshift/cluster-logging-operator/api/observability/v1"
 	. "github.com/openshift/cluster-logging-operator/internal/generator/framework"
 	genhelper "github.com/openshift/cluster-logging-operator/internal/generator/helpers"
@@ -39,62 +38,52 @@ encoding.codec = "json"
 `
 }
 
-// TODO: remove this for otlp ?
+// TODO: test this for otlp
 func (p *Otlp) SetCompression(algo string) {
 	p.Compression.Value = algo
 }
 
 func New(id string, o obsv1.OutputSpec, inputs []string, secrets vectorhelpers.Secrets, strategy common.ConfigStrategy, op Options) []Element {
-
-	log.V(0).Info("===== OTLP output --- New() ---", "id", id, "outputSpec", o, "inputs", inputs, "secrets", secrets)
-
 	if genhelper.IsDebugOutput(op) {
 		return []Element{
 			elements.Debug(helpers.MakeID(id, "debug"), vectorhelpers.MakeInputs(inputs...)),
 		}
 	}
 	var els []Element
+	// Creates reroutes for 'container','journal','linux','kube','openshift','ovn'
 	rerouteID := vectorhelpers.MakeID(id, "reroute")
+	els = append(els, RouteBySource(rerouteID, inputs))
+	// Container
 	transformContainerID := vectorhelpers.MakeID(id, "otlp_container")
 	reduceContainerID := vectorhelpers.MakeID(id, "group_by_container")
+	els = append(els, TransformContainer(transformContainerID, []string{rerouteID + ".container"}))
+	els = append(els, GroupByContainer(reduceContainerID, []string{transformContainerID}))
+	// Journal
 	transformNodeID := vectorhelpers.MakeID(id, "otlp_node")
-	reduceNodeID := vectorhelpers.MakeID(id, "group_by_node")
-	//transformAuditID := vectorhelpers.MakeID(id, "otlp_audit")
-	reduceAuditID := vectorhelpers.MakeID(id, "group_by_audit")
-	formatID := vectorhelpers.MakeID(id, "final_otlp")
-
+	els = append(els, TransformJournal(transformNodeID, []string{rerouteID + ".journal"}))
+	// Audit
 	transformAuditHostID := vectorhelpers.MakeID(id, "otlp_audit_linux")
 	transformAuditKubeID := vectorhelpers.MakeID(id, "otlp_audit_kube")
 	transformAuditOpenshiftID := vectorhelpers.MakeID(id, "otlp_audit_openshift")
 	transformAuditOvnID := vectorhelpers.MakeID(id, "otlp_audit_ovn")
-
-	els = append(els, RouteBySource(rerouteID, inputs))
-	els = append(els, TransformContainer(transformContainerID, []string{rerouteID + ".container"}))
-	els = append(els, GroupByContainer(reduceContainerID, []string{transformContainerID}))
-	els = append(els, TransformJournal(transformNodeID, []string{rerouteID + ".journal"}))
-	els = append(els, GroupByNode(reduceNodeID, []string{transformNodeID}))
-	//els = append(els, TransformAudit(transformAuditID, []string{rerouteID + ".audit"}))
-
 	els = append(els, TransformAuditHost(transformAuditHostID, []string{rerouteID + ".linux"}))
 	els = append(els, TransformAuditKube(transformAuditKubeID, []string{rerouteID + ".kube"}))
 	els = append(els, TransformAuditOpenshift(transformAuditOpenshiftID, []string{rerouteID + ".openshift"}))
 	els = append(els, TransformAuditOvn(transformAuditOvnID, []string{rerouteID + ".ovn"}))
 
-	els = append(els, GroupByAudit(reduceAuditID, []string{
-		//transformAuditID,
+	// Normalize all into resource logs
+	formatID := vectorhelpers.MakeID(id, "final_otlp")
+	els = append(els, FormatResourceLog(formatID, []string{
+		reduceContainerID,
+		transformNodeID,
 		transformAuditHostID,
 		transformAuditKubeID,
 		transformAuditOpenshiftID,
 		transformAuditOvnID,
+		rerouteID + "._unmatched", // mostly for debug, but could be necessary?
 	}))
 
-	els = append(els, FormatBatch(formatID, []string{
-		reduceContainerID,
-		reduceNodeID,
-		reduceAuditID,
-		rerouteID + "._unmatched",
-	}))
-
+	// Create Sink
 	sink := Output(id, o, []string{formatID}, secrets, op)
 	if strategy != nil {
 		strategy.VisitSink(sink)

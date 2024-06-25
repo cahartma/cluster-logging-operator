@@ -132,14 +132,19 @@ func endpointConfig(cw *obs.Cloudwatch) Element {
 func NormalizeStreamName(componentID string, inputs []string) Element {
 	vrl := strings.TrimSpace(`
 .stream_name = "default"
-.tag = ("." + .log_source + "-audit.log" ) ?? .stream_name
 if (.file != null) {
  .file = "kubernetes" + replace!(.file, "/", ".")
  .stream_name = del(.file)
 }
-
 if ( .log_type == "audit" ) {
- .stream_name = ( "${VECTOR_SELF_NODE_NAME}" + .tag ) ?? .stream_name
+ filename = .stream_name
+ if (.log_source == "auditd") { filename = "linux"}
+ if (.log_source == "kubeAPI") { filename = "k8s"}
+ if (.log_source == "openshiftAPI") { filename = "openshift"}
+ if (.log_source == "ovn") { filename = "ovn"}
+ .tag = "." + filename + "-audit.log"
+ .stream_name = "${VECTOR_SELF_NODE_NAME}" + .tag
+ del(.message)
 }
 if ( .log_type == "infrastructure" ) {
  .stream_name = ( .hostname + "." + .stream_name ) ?? .stream_name

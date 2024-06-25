@@ -775,6 +775,15 @@ type Syslog struct {
 	MsgID string `json:"msgID,omitempty"`
 }
 
+type OtlpTuningSpec struct {
+	// Compression causes data to be compressed before sending over the network.
+	// It is an error if the compression type is not supported by the output.
+	//
+	// +kubebuilder:validation:Enum:=gzip;none
+	// +kubebuilder:default:=gzip
+	Compression string `json:"compression,omitempty"`
+}
+
 // Otlp provided configuration for sending OTLP/HTTP with JSON-encoded Protobuf payload requests.
 // https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding
 type Otlp struct {
@@ -789,7 +798,7 @@ type Otlp struct {
 	//
 	// +kubebuilder:validation:Optional
 	// +nullable
-	Tuning *HttpTuningSpec `json:"tuning,omitempty"`
+	Tuning *OtlpTuningSpec `json:"tuning,omitempty"`
 
 	// Headers specify optional headers to be sent with the request
 	// default value is: {"Content-Type"="application/json"}

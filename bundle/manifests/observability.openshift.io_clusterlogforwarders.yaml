@@ -14,7 +14,7 @@ spec:
     listKind: ClusterLogForwarderList
     plural: clusterlogforwarders
     shortNames:
-    - lf
+    - clf
     singular: clusterlogforwarder
   scope: Namespaced
   versions:
@@ -2010,6 +2010,20 @@ spec:
                           description: Timeout specifies the Http request timeout
                             in seconds. If not set, 10secs is used.
                           type: integer
+                        tuning:
+                          description: Tuning specs tuning for the output
+                          nullable: true
+                          properties:
+                            compression:
+                              default: gzip
+                              description: Compression causes data to be compressed
+                                before sending over the network. It is an error if
+                                the compression type is not supported by the output.
+                              enum:
+                              - gzip
+                              - none
+                              type: string
+                          type: object
                         url:
                           description: "URL to send log records to. \n An absolute
                             URL, with a scheme. Valid schemes depend on `type`. Special

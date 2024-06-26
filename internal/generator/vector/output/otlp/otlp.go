@@ -80,7 +80,7 @@ func New(id string, o obsv1.OutputSpec, inputs []string, secrets vectorhelpers.S
 		transformAuditKubeID,
 		transformAuditOpenshiftID,
 		transformAuditOvnID,
-		rerouteID + "._unmatched", // mostly for debug, but could be necessary?
+		rerouteID + "._unmatched", // mostly for debug
 	}))
 
 	// Create Sink

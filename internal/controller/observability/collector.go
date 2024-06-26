@@ -32,7 +32,7 @@ import (
 
 func ReconcileCollector(context internalcontext.ForwarderContext, pollInterval, timeout time.Duration) (err error) {
 	// TODO LOG-2620: containers violate PodSecurity ? should we still do this or should this be
-	if err = AddSecurityLabelsToNamespace(k8Client, clf.Namespace); err != nil {
+	if err = AddSecurityLabelsToNamespace(context.Client, context.Forwarder.Namespace); err != nil {
 		log.Error(err, "Error adding labels to logging Namespace")
 		return
 	}

@@ -66,7 +66,7 @@ inputs = {{.Inputs}}
 expire_after_ms = 10000
 # maximum number of events to group together, this seems to work best at lower value for app logs??
 max_events = 50
-# the kubernetes object will likely need to be removed... how to group container logs??
+# the kubernetes object (any extra fields) are dropped by the receiver, so we can still group by these
 group_by = [".kubernetes.namespace.name",".kubernetes.pod.name",".kubernetes.container.name"]
 merge_strategies.resource = "retain"
 merge_strategies.logRecords = "array"
@@ -106,8 +106,7 @@ func TransformContainer(id string, inputs []string) Element {
 		ComponentID: id,
 		Inputs:      helpers.MakeInputs(inputs...),
 		VRL: strings.TrimSpace(`
-# OTLP semantic conventions for application and infrastructure containers 
-# Included attribute fields
+# OTLP semantic conventions for application and infrastructure containers
 meta = [
   "kubernetes.pod_name", 
   "kubernetes.pod_id",
@@ -150,12 +149,12 @@ if exists(.kubernetes.labels) {
 	}
 }
 # Appending "openshift" attributes
-resource.attributes = append(
-	resource.attributes, 
-	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
-	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
-)
-# transform the record
+#resource.attributes = append(
+#	resource.attributes, 
+#	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+#	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
+#)
+# Transform the record
 r = {}
 r.timeUnixNano = to_string(to_unix_timestamp(parse_timestamp!(.@timestamp, format:"%+"), unit:"nanoseconds"))
 r.observedTimeUnixNano = to_string(to_unix_timestamp(now(), unit:"nanoseconds"))
@@ -166,8 +165,12 @@ r.body = {"stringValue": string!(.message)}
 r.attributes = []
 r.attributes = append(
 	r.attributes,
-	[{"key": "logs.file.path", "value": {"stringValue": .file}}]
+    [{"key": "logs.file.path", "value": {"stringValue": .file}},
+	{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
 )
+# the kubernetes object (any extra fields) are dropped by the receiver, 
+# so we can still add these in order to group/reduce
 . = {
   "kubernetes": .kubernetes,
   "resource": resource,
@@ -190,9 +193,9 @@ resource.attributes = []
 resource.attributes = append(
 	resource.attributes, 
     [{"key": "node.name", "value": {"stringValue": .hostname}},
-    {"key": "cluster.id", "value": {"stringValue": get!(.,["openshift","cluster_id"])}},
-	{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
-	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
+    {"key": "cluster.id", "value": {"stringValue": get!(.,["openshift","cluster_id"])}}]
+#	{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+#	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
 )
 # Transform into resource log records 
 r = {}
@@ -254,6 +257,13 @@ for_each(logAttribute) -> |_,value| {
       [{"key": sub_key, "value": {"stringValue": get!(.,path)}}]
   )
 }
+# Append logRecord attributes
+r.attributes = []
+r.attributes = append(
+	r.attributes,
+	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
+)
 # array of log records, since we are no longer reducing
 . = {
   "resource": resource,
@@ -299,12 +309,12 @@ for_each(meta) -> |_,value| {
   )
 }
 # Appending "openshift" attributes
-resource.attributes = append(
-	resource.attributes, 
-	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
-	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
-)
-# transform the record
+#resource.attributes = append(
+#	resource.attributes, 
+#	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+#	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
+#)
+# Transform the record
 r = {}
 r.timeUnixNano = to_string(to_unix_timestamp(parse_timestamp!(.@timestamp, format:"%+"), unit:"nanoseconds"))
 r.observedTimeUnixNano = to_string(to_unix_timestamp(now(), unit:"nanoseconds"))
@@ -315,14 +325,15 @@ r.body = {"stringValue": string!(.message)}
 r.attributes = []
 r.attributes = append(
 	r.attributes,
-#	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
-#	{"key": "openshift.log.source", "value": {"stringValue": .log_source}},
-	[{"key": "audit.linux.type", "value": {"stringValue": get!(.,["audit.linux", "type"])}},
+	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+	{"key": "openshift.log.source", "value": {"stringValue": .log_source}},
+	{"key": "audit.linux.type", "value": {"stringValue": get!(.,["audit.linux", "type"])}},
 	{"key": "audit.linux.record_id", "value": {"stringValue": get!(.,["audit.linux", "record_id"])}}]
 )
+# An array of records, since no longer grouping/reducing
 . = {
   "resource": resource,
-  "logRecords": r
+  "logRecords": [r]
 }
 
 `),
@@ -337,9 +348,9 @@ resource.attributes = []
 resource.attributes = append(
 	resource.attributes, 
     [{"key": "node.name", "value": {"stringValue": .hostname}},
-    {"key": "cluster.id", "value": {"stringValue": get!(.,["openshift","cluster_id"])}},
-	{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
-	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
+    {"key": "cluster.id", "value": {"stringValue": get!(.,["openshift","cluster_id"])}}]
+#	{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+#	{"key": "openshift.log.source", "value": {"stringValue": .log_source}}]
 )
 # Transform into resource record
 r = {}
@@ -352,10 +363,11 @@ r.body = {"stringValue": string!(.message)}
 r.attributes = []
 r.attributes = append(
 	r.attributes,
-#	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
-#	{"key": "openshift.log.source", "value": {"stringValue": .log_source}},
-	[{"key": "url.full", "value": {"stringValue": .requestURI}},
-	{"key": "http.response.status_code", "value": {"stringValue": get!(.,["responseStatus","code"])}},
+	[{"key": "openshift.log.type", "value": {"stringValue": .log_type}},
+	{"key": "openshift.log.source", "value": {"stringValue": .log_source}},
+	{"key": "url.full", "value": {"stringValue": .requestURI}},
+	{"key": "http.response.status.code", "value": {"stringValue": to_string!(get!(.,["responseStatus","code"]))}},
+#	{"key": "http.response.status_code", "value": {"intValue": get!(.,["responseStatus","code"])}},
 	{"key": "http.request.method", "value": {"stringValue": .verb}}]
 )
 # array of records, since we are no longer reducing

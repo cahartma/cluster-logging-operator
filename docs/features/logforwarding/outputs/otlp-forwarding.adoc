@@ -1,0 +1,413 @@
+= OTLP Output
+
+The OTLP output forwards logs using HTTP/JSON as defined by the OpenTelemetry Observability Framework.  This is a configuration guide for the `ClusterLogForwarder` spec introduced to send logs to OTLP receivers.
+
+
+*OTLP* describes the *protocol* for encoding, transporting, and delivering telemetry data between sources using the https://opentelemetry.io/docs/specs/otlp/[OpenTelemetry OTLP Specification]
+
+.Technical Preview
+This feature is currently in tech-preview and an annotation is required
+
+`observability.openshift.io/tech-preview-otlp-output: "enabled"`
+
+---
+== Configuring the Forwarder
+A new output type `otlp` has been defined in the `ClusterLogForwarder`
+
+.ClusterLogForwarder
+[source,yaml]
+----
+apiVersion: observability.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: my-logforwarder
+  namespace: my-app-namespace
+  annotations:
+    observability.openshift.io/tech-preview-otlp-output: "enabled"
+spec:
+  outputs:
+    - type: otlp  <1>
+      name: otel-collector
+      tls:
+        insecureSkipVerify: true  <2>
+      otlp:
+        url: 'http://my-otel-receiver-service:4318/v1/logs'  <3>
+        tuning:
+          compression: none  <4>
+        authentication:
+          token:
+            from: serviceAccount  <5>
+  pipelines:
+   - name: my-pipeline
+     inputRefs:
+     - application
+     - infrastructure
+     outputRefs:
+     - otel-collector
+  serviceAccount:
+    name: logger-admin
+----
+. Output `type` is '*otlp*'
+. `tls` includes the standard certificate configuration or specify `insecureSkipVerify`: '*true*'
+. `otlp` `url` specify a valid host:port of the otel receiver and *MUST* terminate with "*/v1/logs*"
+. `otlp` `tuning` `compression` default value is "*gzip*". Specify "*none*" to turn compression off.
+. `otlp` `authentication` is optional and specifies a `token` `from` and a value of "*serviceAccount*"
+.. The token can also be read from a secret
+.. Also available with `username` and `password` authentication spec (refer to HTTP Auth Specification for full scope)
+
+
+.TLS InsecureSkipVerify
+[NOTE]
+This option is *NOT* recommended for production configurations. If true, the client will be configured to skip validating server certificates.
+
+https://github.com/openshift/cluster-logging-operator/blob/master/api/observability/v1/clusterlogforwarder_types.go#L244[TLS Specification] for _observability.openshift.io/v1_
+
+https://github.com/openshift/cluster-logging-operator/blob/master/api/observability/v1/output_types.go#L203[HTTP Auth Specification] for _observability.openshift.io/v1_
+
+
+https://github.com/openshift/cluster-logging-operator/blob/master/api/observability/v1/output_types.go#L812[Tuning Specification] for _observability.openshift.io/v1_
+
+
+== Data Model
+
+=== Semantic Convention
+The Semantic Conventions in OpenTelemetry define a *Resource* is an immutable representation of the entity producing telemetry as *Attributes*.
+
+For example, a process producing telemetry that is running in a container has a container_name, a cluster_id, a pod_name, a namespace, and possibly a deployment or app_name.
+
+All of these *Attributes* are included in the *Resource* object.  This grouping and reducing of common attributes is a powerful tool when sending logs as telemetry data.
+
+.OTEL References
+* https://opentelemetry.io/docs/specs/semconv/[Semantic Conventions]
+* https://opentelemetry.io/docs/specs/otel/logs/data-model/[Logs Data Model]
+* https://opentelemetry.io/docs/specs/semconv/general/logs/[General Logs Attributes]
+
+=== Data Mapping
+This document is not a complete spec and is mainly used as a guide.
+
+==== JSON Encoding
+OpenShift Logging uses Vector Remap Language https://vector.dev/docs/reference/vrl/[(VRL)] to map and enrich the logging data in order to the follow the semantic conventions of OpenTelemetry and its https://opentelemetry.io/docs/specs/otel/logs/data-model/[Logs Data Model]
+
+https://github.com/open-telemetry/opentelemetry-proto/blob/v1.3.1/examples/logs.json[Example JSON Encoded Logs] provide a visual representation of the data structure
+
+[%header,format=csv]
+|===
+Viaq,OTEL
+openshift.cluster_id,       resource.attributes.cluster.id
+hostname,	                resource.attributes.node.name
+kubernetes.namespace_name,	resource.attributes.k8s.namespace.name
+kubernetes.pod_name,	    resource.attributes.k8s.pod.name
+kubernetes.pod_id,	        resource.attributes.k8s.pod.uid
+log_source,	                resource.attributes.openshift.log.source
+kubernetes.container_name,	resource.attributes.k8s.container.name
+kubernetes.container_id,	resource.attributes.k8s.container.id
+--,--
+@timestamp,	                logRecords.timeUnixNano
+N/A,	                    logRecords.observedTimeUnixNano
+level,	                    logRecords.severityNumber
+message,                    logRecords.body
+--,--
+log_type,	                logRecords.attributes.log.type
+url,                        logRecords.attributes.url.full
+response.code,              logRecords.attributes.http.response.status.code
+verb,                       logRecords.attributes.http.request.method
+--,--
+systemd.t.PID,                    logRecords.attributes.syslog.procid
+systemd.u.SYSLOG.FACILITY,        logRecords.attributes.syslog.facility
+systemd.u.SYSLOG.IDENTIFIER,      logRecords.attributes.syslog.identifier
+systemd.t.SYSTEMD.CGROUP,         logRecords.attributes.system.cgroup
+systemd.t.SYSTEMD.INVOCATION.ID,  logRecords.attributes.system.invocation.id
+systemd.t.SYSTEMD.SLICE,          logRecords.attributes.system.slice
+systemd.t.SYSTEMD.UNIT,           logRecords.attributes.system.unit
+--,--
+systemd.t.BOOT_ID,                logRecords.attributes.system.boot.id
+systemd.t.COMM,                   logRecords.attributes.system.comm
+systemd.t.CAP_EFFECTIVE,          logRecords.attributes.system.cap.effective
+systemd.t.CMDLINE,                logRecords.attributes.system.cmdline
+systemd.t.EXE,                    logRecords.attributes.system.exe
+systemd.t.GID,                    logRecords.attributes.system.gid
+systemd.t.MACHINE_ID,             logRecords.attributes.system.machine.id
+systemd.t.SELINUX_CONTEXT,        logRecords.attributes.system.selinux.content
+systemd.t.STREAM_ID,              logRecords.attributes.system.stream.id
+systemd.t.TRANSPORT,              logRecords.attributes.system.transport
+|===
+
+Please note:  More work to refine this list is necessary and it will likely change a few times.  Please do not accept this as a specified data model.
+
+* https://github.com/open-telemetry/semantic-conventions/blob/main/docs/general/attributes.md[General Attributes]
+
+.Viaq Data Model
+* https://github.com/openshift/cluster-logging-operator/blob/master/docs/reference/datamodels/viaq/v1.adoc
+
+
+---
+
+
+== A Working Example
+Writing to a OTEL Collector running in another namespace.
+
+.Technical Preview
+An annotation must be added the forwarder definition
+`_observability.openshift.io/tech-preview-otlp-output: "enabled"_`
+
+
+== Steps
+Create a configuration, service and a pod running an image of the otel-collector and forward logs
+
+
+. Create a ConfigMap instance containing a `config.yaml` for the otel-collector.
++
+----
+ oc apply -f otel-receiver-config.yaml
+----
++
+.otel-receiver-config.yaml
+[source,yaml]
+----
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-receiver-config
+  namespace: my-logging
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint:  "0.0.0.0:4318"
+    exporters:
+      debug:
+        verbosity: detailed
+      file:
+        path: /tmp/receiver-logs
+        format: json
+        flush_interval: 1s
+    service:
+      pipelines:
+        logs:
+          receivers: [otlp]
+          exporters: [file,debug]
+----
+This receiver will accept otlp formatted requests using http protocol on port 4318, then export them to a file path (and debug)
+
+
+A receiver is how data gets into a running OTEL Collector.  This receiver type (otlp) accepts the JSON-encoded format we are sending.
+https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/confighttp/README.md#server-configuration
+
+
+
+default protocol for http is json
+https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/confighttp/README.md
+
+
+
+
+https://github.com/open-telemetry/opentelemetry-collector/blob/main/receiver/otlpreceiver/README.md
+
+
+
+
+
+. Configure a receiver pod using an opentelemetry-collector container image
++
+----
+ oc apply -f otel-receiever-pod.yaml
+----
++
+.otel-receiever-pod.yaml
+[source,yaml]
+----
+apiVersion: v1
+kind: Pod
+metadata:
+  name: otel-receiver
+  namespace: my-logging
+  labels:
+    app: otel-receiver
+spec:
+  containers:
+    - name: otel-receiver
+      image: quay.io/openshift-logging/opentelemetry-collector:0.96.0
+      volumeMounts:
+        - name: otel-receiver-config
+          mountPath: /etc/otel
+      ports:
+        - containerPort: 4318
+          name: http
+      env:
+        - name: VECTOR_LOG
+          value: debug
+  volumes:
+    - name: otel-receiver-config
+      configMap:
+        name: otel-receiver-config
+----
+
+. Create a Service to provide access to the receiver port:
++
+----
+ oc apply -f cluster-log-forwarder.yaml
+----
++
+.otel-receiver-service.yaml
+[source,yaml]
+----
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: otel-receiver
+  name: otel-receiver-service
+  namespace: my-logging
+spec:
+  ports:
+    - port: 4318
+      protocol: TCP
+      targetPort: 4318
+      name: otlp-http
+  selector:
+    app: otel-receiver
+----
+
+. (Install v6 of the Cluster Logging Operator)
+. Create a ClusterLogForwarder instance with an output `type: otlp` and the annotation below
++
+----
+ oc apply -f otel-forwarder.yaml
+----
++
+.otel-forwarder.yaml
+[source,yaml]
+----
+apiVersion: observability.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: otlp-forwarder
+  namespace: openshift-logging
+  annotations:
+    observability.openshift.io/tech-preview-otlp-output: "enabled"
+spec:
+  serviceAccount:
+    name: logger-admin
+  outputs:
+    - type: otlp
+      name: to-otel-receiver
+      otlp:
+        url: 'http://otel-receiver-service:4318/v1/logs'
+      tls:
+        insecureSkipVerify: true
+  pipelines:
+   - name: my-pipeline
+     inputRefs:
+     - application
+     - infrastructure
+     outputRefs:
+     - to-otel-receiver
+----
++
+<1> Notice the apiVersion must be 'observability.' and not 'logging.'
+<2> Annotation required (and enabled)
+<3> Service account required with permission to forward application and infrastructure logs
+
+
+=== Accessing Logs
+
+Examples of logs here please
+
+
+
+---
++
+---
++
+---
+
+
+=== References
+* https://opentelemetry.io/docs/specs/otlp/
+* https://opentelemetry.io/docs/specs/semconv/
+* https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model.md#field-resource
+* https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model-appendix.md#data-model-appendix
+* https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model-appendix.md#apache-http-server-access-log
+* https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model-appendix.md
+* https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model.md
+
+* https://github.com/open-telemetry/opentelemetry-proto/tree/v1.3.1
+* https://opentelemetry.io/docs/specs/otlp/
+
+.OTEL-Collector Extensions
+* https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/extension/basicauthextension[basicauthextension]
+
+* https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/extension/bearertokenauthextension[bearertokenauthextension]
+
+.OTEL-Collector Auth Example:
+https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configauth/README.md
+
+
+== Appendix on Authentication
+The OTLP output supports options for setting common authentication credentials and uses the same HTTP Authentication definition built into other outputs
+
+The authentication options are `username/password` or `token`
+
+==== Username/Password Auth
+
+.ClusterLogForwarder
+[source,yaml]
+----
+spec:
+  outputs:
+    - name: otel-collector
+      type: otlp
+      otlp:
+        url: 'http://otel-receiver-service:4318/v1/logs'
+        authentication:
+          username:
+            key: user1 <1>
+            secret:
+              name: my-secret
+          password:
+            key: pass123 <2>
+            secret:
+              name: my-secret
+----
+. Under `athentication` specify the `username` which requries a `key` and `secret` `name` that contains the credentials
+. Specify the `password` `key` and the `secret` `name`
+
+==== Token Auth
+.ClusterLogForwarder
+[source,yaml]
+----
+spec:
+  outputs:
+    - name: otel-collector
+      type: otlp
+      otlp:
+        url: 'http://otel-receiver-service:4318/v1/logs'
+        authentication:
+          token:
+            from: serviceAccount <1>
+----
+. Specifying `token` `from` and `serviceAccount`
+
+The bearer token can also be read from a secret.
+
+[source,yaml]
+----
+spec:
+  outputs:
+    - name: otel-collector
+      type: otlp
+      otlp:
+        url: 'http://otel-receiver-service:4318/v1/logs'
+        authentication:
+          secret:
+            name: your-secret <1>
+            key: some-token1
+----
+. The bearer token `secret` with `name` and `key`
+
+https://github.com/openshift/cluster-logging-operator/blob/master/api/observability/v1/output_types.go#L203[HTTP Auth Specification] for _observability.openshift.io/v1_
+
+
+https://github.com/openshift/cluster-logging-operator/blob/master/api/observability/v1/output_types.go#L812[Tuning Specification] for _observability.openshift.io/v1_

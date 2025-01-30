@@ -1,0 +1,211 @@
+
+== Google Short-Lived Token Authentication
+
+=== Workload Identity Federation
+
+.Summary
+Traditionally, applications use long-lived service account keys to access Cloud resources. These service account keys present a security risk if they are not managed correctly. Workload identity federation uses short-lived access tokens from GCP's Security Token Service (STS), enabling secure access to GCP resources and eliminating the maintenance and security burden associated with service account keys.
+
+.Identity provider
+A workload identity provider is an entity that details the relationship between GCP and an external identity. Once configured, Identity and Access Management (IAM) is used to grant roles to external identities, including the ability to impersonate GCP service accounts.
+
+.Service account impersonation
+The token exchange flow returns a federated access token. You use this token to impersonate a service account and obtain a short-lived OAuth 2.0 access token. The short-lived access token provides temporary access to all resources defined by your workload.
+
+---
+=== Cloud configuration
+The Logging administrator must create a Google Managed Identity and associated bindings to establish trust with the OpenShift Logging Service Account.
+
+. Create a GCP service account used to access cloud resources:
++
+----
+gcloud iam service-accounts create "$SERVICE_ACCOUNT_NAME" \
+  --display-name="My Google Logging Admin" \
+  --project "$PROJECT_ID"
+----
++
+. Bind the *logging.admin* role to the newly created GCP service account:
++
+----
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+  --role="roles/logging.admin"
+----
++
+. Now bind the logging SA to the identity pool created earlier.  This creates a federated user identity
++
+.principle is the identity of the service account from the openshift cluster
+----
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+  --role="roles/workloadIdentityUser" \
+  --member="principal://iam.googleapis.com/projects/$PROJECT_ID/locations/global/workloadIdentityPools/$POOL_ID/subject/system:serviceaccount:${LOGGING_NS}:${LOGGING_SA}"
+----
++
+. Create a local JSON credentials config file for the federated identity
++
+----
+gcloud iam workload-identity-pools create-cred-config \
+  "projects/$PROJECT_ID/locations/global/workloadIdentityPools/$POOL_ID/providers/$PROVIDER_ID" \
+  --service-account="$SERVICE_ACCOUNT_EMAIL" \
+  --credential-source-file=/var/run/secrets/serviceaccount/token \
+  --credential-source-type=text \
+  --output-file="/tmp/my-credentials/external_account.json"
+----
+NOTE: The workload identity pool_id and associated OIDC provider_id needs to be the same that manages your other OpenShift cluster’s managed identities.
++
+.list providers per pool
+----
+gcloud iam workload-identity-pools providers list \
+  --location=global \
+  --project "$PROJECT_ID" \
+  --workload-identity-pool=$POOL_ID
+----
+
+---
+=== Configure the Forwarder
+
+* Create a secret containing the credentials config file
++
+----
+oc create secret generic my-gcp-secret \
+  --from-file=${SECRET_KEY}=/tmp/my-credentials/external_account.json
+----
++
+.The configuration file created earlier should have the following format
+[source,json]
+----
+{
+   "type": "external_account",
+   "audience": "//iam.googleapis.com/projects/123456789/locations/global/workloadIdentityPools/test-pool/providers/test-provider",
+   "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+   "token_url": "https://sts.googleapis.com/v1/token",
+   "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/test-service-account-42ssv@test-project.iam.gserviceaccount.com:generateAccessToken",
+   "credential_source": {
+      "file": "/var/run/secrets/openshift/serviceaccount/token"
+   }
+}
+----
++
+.Replace `audience` and `service_account_impersonation_url` with real values.
+
+
+* Create a Cluster Log Forwarder
++
+.'token.from' is now included in the authentication spec
+[source,yaml]
+----
+apiVersion: observability.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: my-logforwarder
+  namespace: ${LOGGING_NS}  # (1)
+spec:
+  serviceAccount:
+    name: ${SA_NAME}  # (2)
+  outputs:
+    - name: my-gcp
+      type: googleCloudLogging
+      googleCloudLogging:
+        id:
+          type: project
+          value: ${PROJECT_ID}  # (3)
+        logId : my-logs-1
+        authentication:
+          credentials:
+            key: external_account.json  # (4)
+            secretName: gcp-test-secret  # (5)
+          token:
+            from: serviceAccount  # (6)
+  pipelines:
+    - name: my-logs
+      inputRefs:
+        - application
+        - infrastructure
+      outputRefs:
+        - my-gcp
+
+----
+
+. Namespace configured in the previous steps
+. Openshift Service Account for collecting logs
+.. this service account is now configured as a federated user at GCP
+. Project ID should match settings from above
+. Specify the ${SECRET_KEY} from steps above containing the base64 encoded JSON
+. Secret name configured above
+. `token.from` must be set to `serviceAccount`
+
+
+.TLS InsecureSkipVerify
+NOTE: This option is *NOT* recommended for production configurations. If true, the client will be configured to skip validating server certificates.
+
+
+== Alternatively
+=== Configuring cloud resources using the ccoctl utility
+
+You can use the ccoctl utility to create an IAM role with a binding to your cluster's OIDC identity provider. This will grant your openshift service account the Workload Identity User role (roles/iam.workloadIdentityUser), which allows it to impersonate the gcp service account and use the role on your workload (roles/logging.admin)
+
+. Create a yaml file containing a CredentialsRequest CR
++
+[source, yaml]
+----
+apiVersion: cloudcredential.openshift.io/v1
+kind: CredentialsRequest
+metadata:
+  name: ${SECRET_NAME}-credrequest
+  namespace: openshift-cloud-credential-operator
+spec:
+  providerSpec:
+    apiVersion: cloudcredential.openshift.io/v1
+    kind: GCPProviderSpec
+    predefinedRoles:
+      - roles/logging.admin
+    audience: "//iam.googleapis.com/projects/${PROJECT_ID}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}"
+    serviceAccountEmail: ${SERVICE_ACCOUNT_EMAIL}
+  secretRef:
+    name: ${SECRET_NAME}
+    namespace: ${LOGGING_NS}
+  serviceAccountNames:
+    - ${SA_NAME}
+----
++
+. Create cloud resources and local output file
++
+----
+ccoctl gcp create-all \
+  --name=${GCP_RESOURCE_NAME} \
+  --project=${PROJECT_ID} \
+  --region=${REGION} \
+  --credentials-requests-dir=${path_to_yaml} \
+  --output-dir=${OUTPUT_DIR}
+----
++
+The created CR yaml will contain the base64-encoded configuration
++
+.sample output resource file
+[source, yaml]
+----
+apiVersion: v1
+kind: Secret
+data:
+  service_account.json: <encoded_credentials_file>
+type: Opaque
+metadata:
+  name: gcp-test-secret
+  namespace: openshift-logging
+----
++
+. Apply the CR to create an openshift secret based on the new credentials
++
+----
+oc apply -f ${OUTPUT_DIR}/manifests/${LOGGING_NS}-${SECRET_NAME}-credentials.yaml
+----
+
+---
+more here
+
+
+---
+
+* Workload Identity Federation: https://cloud.google.com/iam/docs/workload-identity-federation
+* Secure Token Service Discovery Doc: https://sts.googleapis.com/$discovery/rest?version=v1

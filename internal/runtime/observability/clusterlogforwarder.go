@@ -3,6 +3,7 @@ package observability
 import (
 	obsv1 "github.com/openshift/cluster-logging-operator/api/observability/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // Initializer is a function that knows how to initialize a kubernetes runtime object
@@ -16,5 +17,11 @@ func NewClusterLogForwarder(namespace, name string, initialize Initializer, visi
 		v(clf)
 	}
 	clf.Spec.ManagementState = obsv1.ManagementStateManaged
+
+	// TODO: from spec
+	clf.Spec.Collector.MaxUnavailable = intstr.IntOrString{
+		Type:   intstr.String,
+		StrVal: "%100",
+	}
 	return clf
 }

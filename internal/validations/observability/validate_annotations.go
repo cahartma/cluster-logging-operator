@@ -25,35 +25,35 @@ func IsPercentOrWholeNumber(val string) bool {
 	return compiledMaxUnavailableRegex.MatchString(val)
 }
 
-func validateMaxUnavailableAnnotation(context internalcontext.ForwarderContext) {
-	if value, ok := context.Forwarder.Annotations[constants.AnnotationMaxUnavailable]; ok {
-		if !IsPercentOrWholeNumber(value) {
-			condition := internalobs.NewCondition(obs.ConditionTypeMaxUnavailable, obs.ConditionFalse, obs.ReasonMaxUnavailableSupported, "")
-			condition.Message = fmt.Sprintf("max-unavailable-rollout value %q must be an absolute number or a valid percentage", value)
-			internalobs.SetCondition(&context.Forwarder.Status.Conditions, condition)
-			return
-		}
-	}
-	// Condition is only necessary when it is invalid, otherwise we can remove
-	internalobs.RemoveConditionByType(&context.Forwarder.Status.Conditions, obs.ConditionTypeMaxUnavailable)
-}
+//func validateMaxUnavailableAnnotation(context internalcontext.ForwarderContext) {
+//	if value, ok := context.Forwarder.Annotations[constants.AnnotationMaxUnavailable]; ok {
+//		if !IsPercentOrWholeNumber(value) {
+//			condition := internalobs.NewCondition(obs.ConditionTypeMaxUnavailable, obs.ConditionFalse, obs.ReasonMaxUnavailableSupported, "")
+//			condition.Message = fmt.Sprintf("max-unavailable-rollout value %q must be an absolute number or a valid percentage", value)
+//			internalobs.SetCondition(&context.Forwarder.Status.Conditions, condition)
+//			return
+//		}
+//	}
+//	// Condition is only necessary when it is invalid, otherwise we can remove
+//	internalobs.RemoveConditionByType(&context.Forwarder.Status.Conditions, obs.ConditionTypeMaxUnavailable)
+//}
 
 func IsEnabledValue(val string) bool {
 	return enabledValues.Has(strings.ToLower(val))
 }
 
-func validateUseKubeCacheAnnotation(context internalcontext.ForwarderContext) {
-	if value, ok := context.Forwarder.Annotations[constants.AnnotationKubeCache]; ok {
-		if !IsEnabledValue(value) {
-			condition := internalobs.NewCondition(obs.ConditionTypeUseKubeCache, obs.ConditionFalse, obs.ReasonKubeCacheSupported, "")
-			condition.Message = fmt.Sprintf("use-apiserver-cache value %q must be one of [%s]", value, strings.Join(enabledValues.List(), ", "))
-			internalobs.SetCondition(&context.Forwarder.Status.Conditions, condition)
-			return
-		}
-	}
-	// Condition is only necessary when it is invalid, otherwise we can remove
-	internalobs.RemoveConditionByType(&context.Forwarder.Status.Conditions, obs.ConditionTypeUseKubeCache)
-}
+//func validateUseKubeCacheAnnotation(context internalcontext.ForwarderContext) {
+//	if value, ok := context.Forwarder.Annotations[constants.AnnotationKubeCache]; ok {
+//		if !IsEnabledValue(value) {
+//			condition := internalobs.NewCondition(obs.ConditionTypeUseKubeCache, obs.ConditionFalse, obs.ReasonKubeCacheSupported, "")
+//			condition.Message = fmt.Sprintf("use-apiserver-cache value %q must be one of [%s]", value, strings.Join(enabledValues.List(), ", "))
+//			internalobs.SetCondition(&context.Forwarder.Status.Conditions, condition)
+//			return
+//		}
+//	}
+//	// Condition is only necessary when it is invalid, otherwise we can remove
+//	internalobs.RemoveConditionByType(&context.Forwarder.Status.Conditions, obs.ConditionTypeUseKubeCache)
+//}
 
 func validateLogLevelAnnotation(context internalcontext.ForwarderContext) {
 	if level, ok := context.Forwarder.Annotations[constants.AnnotationVectorLogLevel]; ok {

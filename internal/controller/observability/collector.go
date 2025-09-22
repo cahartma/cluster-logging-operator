@@ -47,9 +47,7 @@ func ReconcileCollector(context internalcontext.ForwarderContext, pollInterval, 
 	}
 
 	// Set kubeapi and rollout options based on annotation (LOG-7196)
-	// TODO: replace with API fields
-	SetKubeCacheOption(context.Forwarder.Annotations, options)
-	SetMaxUnavailableRolloutOption(context.Forwarder.Annotations, options)
+	//evaluateTechPreviewAnnotations(context.Forwarder.Annotations, options)
 
 	if internalobs.Outputs(context.Forwarder.Spec.Outputs).NeedServiceAccountToken() {
 		// temporarily create SA token until collector is capable of dynamically reloading a projected serviceaccount token
@@ -117,8 +115,8 @@ func ReconcileCollector(context internalcontext.ForwarderContext, pollInterval, 
 		resourceNames,
 		isDaemonSet,
 		LogLevel(context.Forwarder.Annotations),
-		factory.IncludesKubeCacheOption(options),
-		factory.GetMaxUnavailableValue(options),
+		//factory.IncludesKubeCacheOption(options),
+		context.Forwarder.Spec.Collector.MaxUnavailable,
 	)
 
 	if err = collectorFactory.ReconcileCollectorConfig(context.Client, context.Reader, context.Forwarder.Namespace, collectorConfig, ownerRef); err != nil {
@@ -164,6 +162,7 @@ func ReconcileCollector(context internalcontext.ForwarderContext, pollInterval, 
 func GenerateConfig(k8Client client.Client, clf obs.ClusterLogForwarder, resourceNames factory.ForwarderResourceNames, secrets internalobs.Secrets, op framework.Options) (config string, err error) {
 	tlsProfile, _ := tls.FetchAPIServerTlsProfile(k8Client)
 	op[framework.ClusterTLSProfileSpec] = tls.GetClusterTLSProfileSpec(tlsProfile)
+	// TODO: determine if we can use this, or remove
 	//EvaluateAnnotationsForEnabledCapabilities(clusterRequest.Forwarder, op)
 	g := forwardergenerator.New()
 	generatedConfig, err := g.GenerateConf(secrets, clf.Spec, clf.Namespace, clf.Name, resourceNames, op)
@@ -188,16 +187,12 @@ func EvaluateAnnotationsForEnabledCapabilities(annotations map[string]string, op
 			if strings.ToLower(value) == "true" {
 				options[generatorhelpers.EnableDebugOutput] = "true"
 			}
-		case constants.AnnotationKubeCache:
-			// Matching the validate_annotations logic
-			if observability.IsEnabledValue(value) {
-				options[framework.UseKubeCacheOption] = "true"
-			}
+		// TODO: to be replaced once GA
 		case constants.AnnotationMaxUnavailable:
 			// Matching the validate_annotations logic
-			if observability.IsPercentOrWholeNumber(value) {
-				options[framework.MaxUnavailableOption] = value
-			}
+			//if observability.IsPercentOrWholeNumber(value) {
+			//	options[framework.MaxUnavailableOption] = value
+			//}
 		}
 	}
 }
@@ -209,20 +204,38 @@ func LogLevel(annotations map[string]string) string {
 	return "warn"
 }
 
-func SetKubeCacheOption(annotations map[string]string, options framework.Options) {
-	if value, found := annotations[constants.AnnotationKubeCache]; found {
-		if observability.IsEnabledValue(value) {
-			log.V(3).Info("Kube cache annotation found")
-			options[framework.UseKubeCacheOption] = "true"
-		}
-	}
-}
+// TODO: to be updated once GA
+//func SetKubeCacheOption(annotations map[string]string, options framework.Options) {
+//	if value, found := annotations[constants.AnnotationKubeCache]; found {
+//		if observability.IsEnabledValue(value) {
+//			log.V(5).Info("Kube cache annotation found")
+//			options[framework.UseKubeCacheOption] = "true"
+//		}
+//	}
+//}
 
+// TODO: to be updated once GA
 func SetMaxUnavailableRolloutOption(annotations map[string]string, options framework.Options) {
 	if value, found := annotations[constants.AnnotationMaxUnavailable]; found {
 		if observability.IsPercentOrWholeNumber(value) {
-			log.V(3).Info("Max Unavailable annotation found")
+			log.V(5).Info("Max Unavailable annotation found")
 			options[framework.MaxUnavailableOption] = value
 		}
 	}
 }
+
+// TODO: to be updated once GA
+//func evaluateTechPreviewAnnotations(annotations map[string]string, options framework.Options) {
+//	//SetKubeCacheOption(annotations, options)
+//	SetMaxUnavailableRolloutOption(annotations, options)
+//}
+//
+//// GetMaxUnavailableValue checks the framework options for the flag maxUnavailableRollout
+//// Default is 100%
+//func GetMaxUnavailableValue(spec) string {
+//	value, _ := utils.GetOption(op, framework.MaxUnavailableOption, "100%")
+//	if !observability.IsPercentOrWholeNumber(value) {
+//		value = "100%"
+//	}
+//	return value
+//}

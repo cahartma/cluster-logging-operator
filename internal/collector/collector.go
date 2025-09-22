@@ -71,7 +71,7 @@ type Factory struct {
 	isDaemonset            bool
 	LogLevel               string
 	UseKubeCache           bool
-	MaxUnavailable         string
+	MaxUnavailable         intstr.IntOrString
 }
 
 // CollectorResourceRequirements returns the resource requirements for a given collector implementation
@@ -89,12 +89,14 @@ func (f *Factory) NodeSelector() map[string]string {
 func (f *Factory) Tolerations() []v1.Toleration {
 	return f.CollectorSpec.Tolerations
 }
-
 func (f *Factory) Affinity() *v1.Affinity {
 	return f.CollectorSpec.Affinity
 }
 
-func New(confHash, clusterID string, collectorSpec *obs.CollectorSpec, secrets internalobs.Secrets, configMaps map[string]*v1.ConfigMap, forwarderSpec obs.ClusterLogForwarderSpec, resNames *factory.ForwarderResourceNames, isDaemonset bool, logLevel string, useCache bool, maxUnavailable string) *Factory {
+//	func (f *Factory) MaxUnavailable() *string {
+//		return f.CollectorSpec.MaxUnavailable
+//	}
+func New(confHash, clusterID string, collectorSpec *obs.CollectorSpec, secrets internalobs.Secrets, configMaps map[string]*v1.ConfigMap, forwarderSpec obs.ClusterLogForwarderSpec, resNames *factory.ForwarderResourceNames, isDaemonset bool, logLevel string, maxUnavailable intstr.IntOrString) *Factory {
 	if collectorSpec == nil {
 		collectorSpec = &obs.CollectorSpec{}
 	}
@@ -114,7 +116,7 @@ func New(confHash, clusterID string, collectorSpec *obs.CollectorSpec, secrets i
 		PodLabelVisitor: vector.PodLogExcludeLabel,
 		isDaemonset:     isDaemonset,
 		LogLevel:        logLevel,
-		UseKubeCache:    useCache,
+		UseKubeCache:    true,
 		MaxUnavailable:  maxUnavailable,
 	}
 	return factory
@@ -143,6 +145,7 @@ func (f *Factory) NewPodSpec(trustedCABundle *v1.ConfigMap, spec obs.ClusterLogF
 		TerminationGracePeriodSeconds: utils.GetPtr[int64](10),
 		Tolerations:                   append(constants.DefaultTolerations(), f.Tolerations()...),
 		Affinity:                      f.Affinity(),
+
 		Volumes: []v1.Volume{
 			{Name: metricsVolumeName, VolumeSource: v1.VolumeSource{Secret: &v1.SecretVolumeSource{SecretName: f.ResourceNames.SecretMetrics}}},
 			{Name: tmpVolumeName, VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{Medium: v1.StorageMediumMemory}}},

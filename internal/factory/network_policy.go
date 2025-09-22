@@ -32,7 +32,7 @@ func NewNetworkPolicy(namespace, policyName, instanceName, component string, pol
 			}
 		case networkingv1.PolicyTypeEgress:
 			np.Spec.Egress = []networkingv1.NetworkPolicyEgressRule{
-				{}, // Empty rule allows all egress traffic for the component pods	
+				{}, // Empty rule allows all egress traffic for the component pods
 			}
 		}
 	}

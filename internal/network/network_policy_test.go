@@ -19,12 +19,12 @@ var _ = Describe("Reconcile NetworkPolicy", func() {
 	defer GinkgoRecover()
 
 	var (
-		owner metav1.OwnerReference
+		owner          metav1.OwnerReference
 		policyInstance *networkingv1.NetworkPolicy
 		policyKey      types.NamespacedName
-		policyName    string
-		componentName string
-		commonLabels  func(o runtime.Object)
+		policyName     string
+		componentName  string
+		commonLabels   func(o runtime.Object)
 
 		// Adding ns and label to account for addSecurityLabelsToNamespace() added in LOG-2620
 		namespace = &corev1.Namespace{
@@ -36,17 +36,17 @@ var _ = Describe("Reconcile NetworkPolicy", func() {
 		reqClient = fake.NewFakeClient(
 			namespace,
 		)
-		instanceName  = "test-instance"
+		instanceName = "test-instance"
 	)
 
 	Context("when the collector NetworkPolicy is reconciled", func() {
-		BeforeEach(func() {		
+		BeforeEach(func() {
 			policyName = "collector-test-network-policy"
 			componentName = constants.CollectorName
 			commonLabels = func(o runtime.Object) {
 				runtime.SetCommonLabels(o, constants.VectorName, instanceName, componentName)
 			}
-			owner =metav1.OwnerReference{
+			owner = metav1.OwnerReference{
 				APIVersion: "v1",
 				Kind:       "ClusterLogForwarder",
 				Name:       instanceName,
@@ -113,7 +113,7 @@ var _ = Describe("Reconcile NetworkPolicy", func() {
 			commonLabels = func(o runtime.Object) {
 				runtime.SetCommonLabels(o, constants.LogfilesmetricexporterName, instanceName, componentName)
 			}
-			owner =metav1.OwnerReference{
+			owner = metav1.OwnerReference{
 				APIVersion: "v1",
 				Kind:       "LogFileMetricExporter",
 				Name:       instanceName,

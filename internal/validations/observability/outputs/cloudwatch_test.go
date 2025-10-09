@@ -88,7 +88,7 @@ var _ = Describe("validating CloudWatch auth", func() {
 								From: obs.BearerTokenFromServiceAccount,
 							},
 						},
-						AssumeRole: &obs.CloudwatchAssumeRole{
+						AssumeRole: &obs.AwsAssumeRole{
 							RoleARN: obs.SecretReference{
 								SecretName: "foo",
 								Key:        "assume_role_arn",
@@ -143,7 +143,7 @@ var _ = Describe("validating CloudWatch auth", func() {
 								From: obs.BearerTokenFromServiceAccount,
 							},
 						},
-						AssumeRole: &obs.CloudwatchAssumeRole{
+						AssumeRole: &obs.AwsAssumeRole{
 							RoleARN: obs.SecretReference{
 								SecretName: "foo",
 								Key:        "invalid_assume_role_arn",
@@ -202,7 +202,7 @@ var _ = Describe("validating CloudWatch auth", func() {
 								From: obs.BearerTokenFromServiceAccount,
 							},
 						},
-						AssumeRole: &obs.CloudwatchAssumeRole{
+						AssumeRole: &obs.AwsAssumeRole{
 							RoleARN: obs.SecretReference{
 								SecretName: "foo",
 								Key:        "invalid_assume_role_arn",
@@ -266,7 +266,7 @@ var _ = Describe("validating CloudWatch auth", func() {
 								SecretName: secretName,
 							},
 						},
-						AssumeRole: &obs.CloudwatchAssumeRole{
+						AssumeRole: &obs.AwsAssumeRole{
 							RoleARN: obs.SecretReference{
 								SecretName: secretName,
 								Key:        "assume_role_arn",
@@ -322,7 +322,7 @@ var _ = Describe("validating CloudWatch auth", func() {
 								SecretName: secretName,
 							},
 						},
-						AssumeRole: &obs.CloudwatchAssumeRole{
+						AssumeRole: &obs.AwsAssumeRole{
 							RoleARN: obs.SecretReference{
 								SecretName: secretName,
 								Key:        "invalid_assume_role_arn",

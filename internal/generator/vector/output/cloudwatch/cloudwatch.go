@@ -2,6 +2,7 @@ package cloudwatch
 
 import (
 	_ "embed"
+	cloudwatch2 "github.com/openshift/cluster-logging-operator/internal/collector/cloudwatch"
 	"github.com/openshift/cluster-logging-operator/internal/constants"
 	"github.com/openshift/cluster-logging-operator/internal/utils"
 	"strings"
@@ -127,7 +128,7 @@ func authConfig(outputName string, auth *obs.CloudwatchAuthentication, options O
 		if auth.AssumeRole != nil {
 			authConfig.AssumeRole.Value = vectorhelpers.SecretFrom(&auth.AssumeRole.RoleARN)
 			// Optional externalID
-			if hasExtID, extID := AssumeRoleHasExternalId(auth.AssumeRole); hasExtID {
+			if hasExtID, extID := cloudwatch2.AssumeRoleHasExternalId(auth.AssumeRole); hasExtID {
 				authConfig.ExternalID.Value = extID
 			}
 		}

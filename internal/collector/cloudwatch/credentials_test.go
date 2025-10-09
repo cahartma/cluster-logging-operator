@@ -1,7 +1,7 @@
 package cloudwatch_test
 
 import (
-	"github.com/openshift/cluster-logging-operator/internal/generator/vector/output/cloudwatch"
+	"github.com/openshift/cluster-logging-operator/internal/collector/cloudwatch"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -42,7 +42,7 @@ var _ = Describe("cloudwatch auth configmap", func() {
 					Type: obs.OutputTypeElasticsearch,
 				},
 			}
-			Expect(cloudwatch.GenerateProfileCreds(nil, "test-clf", outputs, cwSecret)).To(BeNil())
+			Expect(cloudwatch.GenerateCloudWatchProfileCreds(nil, "test-clf", outputs, cwSecret)).To(BeNil())
 		})
 
 		It("should be nil if secrets are nil and no cloudwatch outputs", func() {
@@ -53,7 +53,7 @@ var _ = Describe("cloudwatch auth configmap", func() {
 				},
 			}
 
-			Expect(cloudwatch.GenerateProfileCreds(nil, "test-clf", outputs, nil)).To(BeNil())
+			Expect(cloudwatch.GenerateCloudWatchProfileCreds(nil, "test-clf", outputs, nil)).To(BeNil())
 		})
 
 		It("should be nil if cloudwatch output is not role based", func() {
@@ -75,11 +75,11 @@ var _ = Describe("cloudwatch auth configmap", func() {
 				},
 			}
 
-			Expect(cloudwatch.GenerateProfileCreds(nil, "test-clf", outputs, nil)).To(BeNil())
+			Expect(cloudwatch.GenerateCloudWatchProfileCreds(nil, "test-clf", outputs, nil)).To(BeNil())
 		})
 
 		It("should be nil if secrets are nil and outputs are nil", func() {
-			Expect(cloudwatch.GenerateProfileCreds(nil, "test-clf", nil, nil)).To(BeNil())
+			Expect(cloudwatch.GenerateCloudWatchProfileCreds(nil, "test-clf", nil, nil)).To(BeNil())
 		})
 
 		DescribeTable("token path", func(token obs.BearerToken, exp cloudwatch.ProfileCredentials) {
@@ -102,7 +102,7 @@ var _ = Describe("cloudwatch auth configmap", func() {
 					},
 				},
 			}
-			actIds := cloudwatch.GenerateProfileCreds(nil, "test-clf", cwOutputs, cwSecret)
+			actIds := cloudwatch.GenerateCloudWatchProfileCreds(nil, "test-clf", cwOutputs, cwSecret)
 			Expect(actIds[0]).To(Equal(exp))
 		},
 			Entry("should get token from secret", obs.BearerToken{
@@ -179,17 +179,17 @@ var _ = Describe("cloudwatch auth configmap", func() {
 				},
 			}
 
-			actIds := cloudwatch.GenerateProfileCreds(nil, "test-clf", cwOutputs, cwSecret)
+			actIds := cloudwatch.GenerateCloudWatchProfileCreds(nil, "test-clf", cwOutputs, cwSecret)
 			Expect(actIds).To(Equal(expCreds))
 		})
 	})
 
-	DescribeTable("cloudwatch credential go template", func(creds []cloudwatch.ProfileCredentials, expFile string) {
-		exp, err := testFiles.ReadFile(expFile)
+	DescribeTable("cloudwatch credential go template", func(credentials []cloudwatch.ProfileCredentials, expFile string) {
+		exp, err := credFiles.ReadFile(expFile)
 		Expect(err).To(BeNil())
 
 		w := &strings.Builder{}
-		err = cloudwatch.ProfileTemplate.Execute(w, creds)
+		err = cloudwatch.ProfileTemplate.Execute(w, credentials)
 
 		Expect(err).To(BeNil())
 		Expect(w.String()).To(Equal(string(exp)))
@@ -200,7 +200,7 @@ var _ = Describe("cloudwatch auth configmap", func() {
 				RoleARN:              "arn:aws:iam::123456789012:role/test-default",
 				WebIdentityTokenFile: saTokenPath,
 			},
-		}, "files/cw_single_credential"),
+		}, "cw_single_credential"),
 		Entry("should generate multiple profiles when multiple credentials are present", []cloudwatch.ProfileCredentials{
 			{
 				Name:                 "default",
@@ -217,7 +217,7 @@ var _ = Describe("cloudwatch auth configmap", func() {
 				RoleARN:              "arn:aws:iam::123456789012:role/test-bar",
 				WebIdentityTokenFile: saTokenPath,
 			},
-		}, "files/cw_multiple_credentials"),
+		}, "cw_multiple_credentials"),
 		Entry("should generate assume role profile", []cloudwatch.ProfileCredentials{
 			{
 				Name:                 "default",
@@ -227,5 +227,5 @@ var _ = Describe("cloudwatch auth configmap", func() {
 				ExternalID:           "unique-external-id",
 				SessionName:          "output-default",
 			},
-		}, "files/cw_assume_role_single"))
+		}, "cw_assume_role_single"))
 })

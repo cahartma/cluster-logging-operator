@@ -54,7 +54,7 @@ func ReconcileCredsFile(k8sClient client.Client, reader client.Reader, namespace
 
 // GenerateCredString generates IAM profile credentials as a formatted string
 func GenerateCredString(reader client.Reader, clfName string, outputs []obs.OutputSpec, secrets observability.Secrets) (string, error) {
-	credsData := GenerateProfileCreds(reader, clfName, outputs, secrets)
+	credsData := GenerateCloudWatchProfileCreds(reader, clfName, outputs, secrets)
 	if credsData == nil {
 		return "", nil
 	}
@@ -67,10 +67,10 @@ func GenerateCredString(reader client.Reader, clfName string, outputs []obs.Outp
 	return w.String(), nil
 }
 
-// GenerateProfileCreds generates a credential object from secrets and projected tokens for each output
-func GenerateProfileCreds(reader client.Reader, clfName string, outputs []obs.OutputSpec, secrets observability.Secrets) (profileCredentials []ProfileCredentials) {
+// GenerateCloudWatchProfileCreds generates a credential object from secrets and projected tokens for each output
+func GenerateCloudWatchProfileCreds(reader client.Reader, clfName string, outputs []obs.OutputSpec, secrets observability.Secrets) (profileCredentials []ProfileCredentials) {
 	for _, o := range outputs {
-		if isRoleAuth, awsAuth := OutputIsRoleAuth(o); isRoleAuth {
+		if isRoleAuth, awsAuth := OutputIsCloudwatchRoleAuth(o); isRoleAuth {
 			// Build credentials object
 			profile := ProfileCredentials{
 				Name: o.Name,
@@ -122,15 +122,15 @@ func generateSessionName(reader client.Reader, clfName, outputName string) strin
 // RequiresProfilesConfigMap determine if a credentials configMap should be created for AWS
 func RequiresProfilesConfigMap(outputs []obs.OutputSpec) bool {
 	for _, o := range outputs {
-		if found, _ := OutputIsRoleAuth(o); found {
+		if found, _ := OutputIsCloudwatchRoleAuth(o); found {
 			return true
 		}
 	}
 	return false
 }
 
-// OutputIsRoleAuth identifies if `output.Cloudwatch.Authentication.IAMRole` exists and returns ref if so
-func OutputIsRoleAuth(o obs.OutputSpec) (bool, *obs.CloudwatchAuthentication) {
+// OutputIsCloudwatchRoleAuth identifies if `output.Cloudwatch.Authentication.IAMRole` exists and returns ref if so
+func OutputIsCloudwatchRoleAuth(o obs.OutputSpec) (bool, *obs.CloudwatchAuthentication) {
 	if o.Cloudwatch != nil && o.Cloudwatch.Authentication != nil && o.Cloudwatch.Authentication.IAMRole != nil {
 		return true, o.Cloudwatch.Authentication
 	}
@@ -138,7 +138,7 @@ func OutputIsRoleAuth(o obs.OutputSpec) (bool, *obs.CloudwatchAuthentication) {
 }
 
 // OutputIsAssumeRole identifies if 'output.Cloudwatch.Authentication.AssumeRole` exists and returns ref if so
-func OutputIsAssumeRole(o obs.OutputSpec) (bool, *obs.CloudwatchAssumeRole) {
+func OutputIsAssumeRole(o obs.OutputSpec) (bool, *obs.AwsAssumeRole) {
 	if o.Cloudwatch != nil && o.Cloudwatch.Authentication != nil && o.Cloudwatch.Authentication.AssumeRole != nil {
 		return true, o.Cloudwatch.Authentication.AssumeRole
 	}
@@ -146,7 +146,7 @@ func OutputIsAssumeRole(o obs.OutputSpec) (bool, *obs.CloudwatchAssumeRole) {
 }
 
 // AssumeRoleHasExternalId identifies if externalID exists and returns the string
-func AssumeRoleHasExternalId(assumeRole *obs.CloudwatchAssumeRole) (bool, string) {
+func AssumeRoleHasExternalId(assumeRole *obs.AwsAssumeRole) (bool, string) {
 	if assumeRole.ExternalID != "" {
 		return true, assumeRole.ExternalID
 	}
@@ -163,7 +163,7 @@ func ParseRoleArn(authSpec *obs.CloudwatchAuthentication, secrets observability.
 }
 
 // ParseAssumeRoleArn search for valid AWS assumeRole arn, return empty for no match
-func ParseAssumeRoleArn(assumeRoleSpec *obs.CloudwatchAssumeRole, secrets observability.Secrets) string {
+func ParseAssumeRoleArn(assumeRoleSpec *obs.AwsAssumeRole, secrets observability.Secrets) string {
 	var roleString string
 	if assumeRoleSpec != nil {
 		roleString = secrets.AsString(&assumeRoleSpec.RoleARN)

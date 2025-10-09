@@ -2,6 +2,7 @@ package cloudwatch_test
 
 import (
 	"fmt"
+	. "github.com/openshift/cluster-logging-operator/internal/collector/cloudwatch"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -190,7 +191,7 @@ var _ = Describe("Generating vector config for cloudwatch output", func() {
 							SecretName: secretName,
 						},
 					},
-					AssumeRole: &obs.CloudwatchAssumeRole{
+					AssumeRole: &obs.AwsAssumeRole{
 						RoleARN: obs.SecretReference{
 							Key:        "my_role_arn",
 							SecretName: secretWithCredentials,
@@ -323,7 +324,7 @@ var _ = Describe("Generating vector config for cloudwatch output", func() {
 			Entry("should return the value explicitly spec'd with iamRole auth",
 				obs.CloudwatchAuthentication{
 					Type: obs.CloudwatchAuthTypeIAMRole,
-					AssumeRole: &obs.CloudwatchAssumeRole{
+					AssumeRole: &obs.AwsAssumeRole{
 						RoleARN: obs.SecretReference{
 							Key:        "assume_role_arn",
 							SecretName: secretName,
@@ -334,7 +335,7 @@ var _ = Describe("Generating vector config for cloudwatch output", func() {
 			Entry("should return the secret value specified (assumeRole with accessKey auth)",
 				obs.CloudwatchAuthentication{
 					Type: obs.CloudwatchAuthTypeIAMRole,
-					AssumeRole: &obs.CloudwatchAssumeRole{
+					AssumeRole: &obs.AwsAssumeRole{
 						RoleARN: obs.SecretReference{
 							Key:        "assume_role_arn",
 							SecretName: secretName,
@@ -345,7 +346,7 @@ var _ = Describe("Generating vector config for cloudwatch output", func() {
 			Entry("should return a specified valid assume role arn when the partition is more than 'aws'",
 				obs.CloudwatchAuthentication{
 					Type: obs.CloudwatchAuthTypeIAMRole,
-					AssumeRole: &obs.CloudwatchAssumeRole{
+					AssumeRole: &obs.AwsAssumeRole{
 						RoleARN: obs.SecretReference{
 							Key:        "alt_assume_role_arn",
 							SecretName: secretName,
@@ -359,7 +360,7 @@ var _ = Describe("Generating vector config for cloudwatch output", func() {
 			Entry("should return empty string when value is incorrectly formatted",
 				obs.CloudwatchAuthentication{
 					Type: obs.CloudwatchAuthTypeIAMRole,
-					AssumeRole: &obs.CloudwatchAssumeRole{
+					AssumeRole: &obs.AwsAssumeRole{
 						RoleARN: obs.SecretReference{
 							Key:        "bad_arn",
 							SecretName: secretName,
@@ -388,7 +389,7 @@ var _ = Describe("Generating vector config for cloudwatch output", func() {
 								From: obs.BearerTokenFromServiceAccount,
 							},
 						},
-						AssumeRole: &obs.CloudwatchAssumeRole{
+						AssumeRole: &obs.AwsAssumeRole{
 							RoleARN: obs.SecretReference{
 								Key:        "assume_role_arn",
 								SecretName: secretName,

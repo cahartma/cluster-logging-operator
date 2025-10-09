@@ -4,7 +4,7 @@ import (
 	obs "github.com/openshift/cluster-logging-operator/api/observability/v1"
 	internalcontext "github.com/openshift/cluster-logging-operator/internal/api/context"
 	"github.com/openshift/cluster-logging-operator/internal/api/observability"
-	"github.com/openshift/cluster-logging-operator/internal/generator/vector/output/cloudwatch"
+	"github.com/openshift/cluster-logging-operator/internal/collector/cloudwatch"
 	_ "github.com/openshift/cluster-logging-operator/internal/generator/vector/output/cloudwatch"
 )
 
@@ -16,7 +16,7 @@ const (
 // ValidateCloudWatchAuth ensures auth role and assumeRole ARN's are valid
 func ValidateCloudWatchAuth(o obs.OutputSpec, context internalcontext.ForwarderContext) (results []string) {
 	secrets := observability.Secrets(context.Secrets)
-	if isRoleAuth, awsAuth := cloudwatch.OutputIsRoleAuth(o); isRoleAuth {
+	if isRoleAuth, awsAuth := cloudwatch.OutputIsCloudwatchRoleAuth(o); isRoleAuth {
 		roleArn := cloudwatch.ParseRoleArn(awsAuth, secrets)
 		if roleArn == "" {
 			results = append(results, ErrInvalidRoleARN)

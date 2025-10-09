@@ -53,6 +53,8 @@ func (outputs Outputs) NeedServiceAccountToken() bool {
 			auths = append(auths, o.LokiStack.Authentication.Token)
 		case o.Type == obsv1.OutputTypeCloudwatch && o.Cloudwatch != nil && o.Cloudwatch.Authentication.Type == obsv1.CloudwatchAuthTypeIAMRole:
 			auths = append(auths, &o.Cloudwatch.Authentication.IAMRole.Token)
+		case o.Type == obsv1.OutputTypeS3 && o.S3 != nil && o.S3.Authentication.Type == obsv1.S3AuthTypeIAMRole:
+			auths = append(auths, &o.S3.Authentication.IAMRole.Token)
 		case o.Type == obsv1.OutputTypeElasticsearch && o.Elasticsearch != nil && o.Elasticsearch.Authentication != nil && o.Elasticsearch.Authentication.Token != nil:
 			auths = append(auths, o.Elasticsearch.Authentication.Token)
 		case o.Type == obsv1.OutputTypeOTLP && o.OTLP.Authentication != nil && o.OTLP.Authentication.Token != nil:
@@ -112,6 +114,11 @@ func SecretReferences(o obsv1.OutputSpec) []*obsv1.SecretReference {
 			// cross-account feature LOG-7687
 			return appendAssumeRoleKeys(a, keys)
 		}
+	case obsv1.OutputTypeS3:
+		if o.S3 != nil && o.S3.Authentication != nil {
+			a := o.S3.Authentication
+			return s3AuthKeys(a)
+		}
 	case obsv1.OutputTypeElasticsearch:
 		if o.Elasticsearch != nil && o.Elasticsearch.Authentication != nil {
 			return httpAuthKeys(o.Elasticsearch.Authentication)
@@ -148,7 +155,7 @@ func SecretReferences(o obsv1.OutputSpec) []*obsv1.SecretReference {
 		}
 	case obsv1.OutputTypeSyslog:
 	default:
-		log.V(3).Error(OutputTypeUnknown(o.Type), "Found unsupported output type while gathering secret names")
+		log.V(0).Error(OutputTypeUnknown(o.Type), "Found unsupported output type while gathering secret names")
 		os.Exit(1)
 	}
 	return []*obsv1.SecretReference{}
@@ -198,6 +205,27 @@ func cloudwatchSecretKeys(auth *obsv1.CloudwatchAuthentication) (keys []*obsv1.S
 				Key:        auth.IAMRole.Token.Secret.Key,
 				SecretName: auth.IAMRole.Token.Secret.Name,
 			})
+		}
+	}
+	return keys
+}
+
+func s3AuthKeys(auth *obsv1.S3Authentication) (keys []*obsv1.SecretReference) {
+	if auth != nil {
+		if auth.AWSAccessKey != nil {
+			keys = append(keys, &auth.AWSAccessKey.KeyId, &auth.AWSAccessKey.KeySecret)
+		}
+		if auth.IAMRole != nil {
+			keys = append(keys, &auth.IAMRole.RoleARN)
+			if auth.IAMRole.Token.From == obsv1.BearerTokenFromSecret && auth.IAMRole.Token.Secret != nil {
+				keys = append(keys, &obsv1.SecretReference{
+					Key:        auth.IAMRole.Token.Secret.Key,
+					SecretName: auth.IAMRole.Token.Secret.Name,
+				})
+			}
+		}
+		if auth.AssumeRole != nil {
+			keys = append(keys, &auth.AssumeRole.RoleARN)
 		}
 	}
 	return keys

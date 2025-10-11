@@ -8,6 +8,7 @@ import (
 	"strconv"
 )
 
+// TODO: this needs to be verified
 func Global(namespace, forwarderName string) []framework.Element {
 	dataDir := vector.GetDataPath(namespace, forwarderName)
 	if dataDir == vector.DefaultDataPath {
@@ -45,3 +46,5 @@ address = "0.0.0.0:` + strconv.Itoa(int(collector.HealthPort)) + `"
 {{end}}
 `
 }
+
+// This is a temp fix for vector api no longer working

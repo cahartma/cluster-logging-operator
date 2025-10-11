@@ -2,17 +2,11 @@ package s3
 
 import (
 	_ "embed"
-	cloudwatch2 "github.com/openshift/cluster-logging-operator/internal/collector/cloudwatch"
-	"strings"
-
-	"github.com/openshift/cluster-logging-operator/internal/api/observability"
-	"github.com/openshift/cluster-logging-operator/internal/constants"
-	"github.com/openshift/cluster-logging-operator/internal/utils"
-
 	obs "github.com/openshift/cluster-logging-operator/api/observability/v1"
-	"github.com/openshift/cluster-logging-operator/internal/generator/framework"
+	"github.com/openshift/cluster-logging-operator/internal/api/observability"
 	. "github.com/openshift/cluster-logging-operator/internal/generator/framework"
 	"github.com/openshift/cluster-logging-operator/internal/generator/vector/output/common"
+	"github.com/openshift/cluster-logging-operator/internal/generator/vector/output/common/aws"
 	"github.com/openshift/cluster-logging-operator/internal/generator/vector/output/common/template"
 	"github.com/openshift/cluster-logging-operator/internal/generator/vector/output/common/tls"
 
@@ -130,39 +124,10 @@ func sink(id string, o obs.OutputSpec, inputs []string, secrets observability.Se
 		Bucket:         bucket,
 		KeyPrefix:      keyPrefix,
 		Compression:    compressionConfig(o.S3),
-		SecurityConfig: authConfig(o.Name, o.S3.Authentication, op),
+		SecurityConfig: aws.AuthConfig(o.Name, o.S3.Authentication, op, secrets),
 		EndpointConfig: endpointConfig(o.S3),
 		RootMixin:      common.NewRootMixin("none"),
 	}
-}
-
-func authConfig(outputName string, auth *obs.S3Authentication, options Options) Element {
-	authConfig := NewAuth()
-	if auth == nil {
-		return authConfig
-	}
-	switch auth.Type {
-	case obs.S3AuthTypeAccessKey:
-		authConfig.KeyID.Value = vectorhelpers.SecretFrom(&auth.AWSAccessKey.KeyId)
-		authConfig.KeySecret.Value = vectorhelpers.SecretFrom(&auth.AWSAccessKey.KeySecret)
-		// New assumeRole works with static keys as well
-		if auth.AssumeRole != nil {
-			authConfig.AssumeRole.Value = vectorhelpers.SecretFrom(&auth.AssumeRole.RoleARN)
-			// Optional externalID
-			if hasExtID, extID := cloudwatch2.AssumeRoleHasExternalId(auth.AssumeRole); hasExtID {
-				authConfig.ExternalID.Value = extID
-			}
-			if auth.AssumeRole.SessionName != "" {
-				authConfig.SessionName.Value = auth.AssumeRole.SessionName
-			}
-		}
-	case obs.S3AuthTypeIAMRole:
-		if forwarderName, found := utils.GetOption(options, framework.OptionForwarderName, ""); found {
-			authConfig.CredentialsPath.Value = strings.Trim(vectorhelpers.ConfigPath(forwarderName+"-"+constants.AWSCredentialsConfigMapName, constants.AWSCredentialsKey), `"`)
-			authConfig.Profile.Value = "output_" + outputName
-		}
-	}
-	return authConfig
 }
 
 func endpointConfig(s3 *obs.S3) Element {

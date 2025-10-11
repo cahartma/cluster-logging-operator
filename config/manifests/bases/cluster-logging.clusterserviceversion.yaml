@@ -406,7 +406,8 @@ spec:
           logs
         displayName: Amazon CloudWatch
         path: outputs[0].cloudwatch
-      - description: Authentication sets credentials for authenticating the requests.
+      - description: Authentication sets credentials for authenticating requests to
+          cloudwatch services.
         displayName: Authentication Options
         path: outputs[0].cloudwatch.authentication
       - description: |-
@@ -447,7 +448,7 @@ spec:
         path: outputs[0].cloudwatch.authentication.assumeRole.sessionName
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
-      - description: AWSAccessKey points to the AWS access key id and secret to be
+      - description: AwsAccessKey points to the AWS access key id and secret to be
           used for authentication.
         displayName: Access Key
         path: outputs[0].cloudwatch.authentication.awsAccessKey
@@ -481,7 +482,7 @@ spec:
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
       - description: |-
-          IAMRole points to the secret containing the role ARN to be used for authentication.
+          IamRole points to the secret containing the role ARN to be used for authentication.
           This can be used for authentication in STS-enabled clusters when additionally specifying
           a web identity token
         displayName: Amazon IAM Role
@@ -1378,10 +1379,10 @@ spec:
         displayName: Authentication Options
         path: outputs[0].s3.authentication
       - description: |-
-          AssumeRole specifies an additional IAM role to assume after the initial authentication.
-          This enables cross-account log forwarding where the initial role (from IAMRole or AWSAccessKey)
-          is used to authenticate, and then this role is assumed to access S3 in another account.
-        displayName: Cross-Account Assume Role
+          AssumeRole specifies an additional AWS role to assume for forwarding logs.
+          This enables cross-account log forwarding by using the initial role to authenticate,
+          then assume a role in order to access cross-account services.
+        displayName: Assume Role
         path: outputs[0].s3.authentication.assumeRole
       - description: |-
           ExternalID is the external ID to match when assuming the role.
@@ -1415,7 +1416,7 @@ spec:
         path: outputs[0].s3.authentication.assumeRole.sessionName
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
-      - description: AWSAccessKey points to the AWS access key id and secret to be
+      - description: AwsAccessKey points to the AWS access key id and secret to be
           used for authentication.
         displayName: Access Key
         path: outputs[0].s3.authentication.awsAccessKey
@@ -1449,14 +1450,14 @@ spec:
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
       - description: |-
-          IAMRole points to the secret containing the role ARN to be used for authentication.
+          IamRole points to the secret containing the role ARN to be used for authentication.
           This can be used for authentication in STS-enabled clusters when additionally specifying
           a web identity token
         displayName: Amazon IAM Role
         path: outputs[0].s3.authentication.iamRole
       - description: |-
-          RoleARN points to the secret containing the role ARN to be used for authentication.
-          This is used for authentication in STS-enabled clusters.
+          RoleARN specifies the secret containing the role ARN to be used for AWS authentication.
+          This role requires an OIDC provider to be configured in an STS-enabled cluster.
         displayName: RoleARN Secret
         path: outputs[0].s3.authentication.iamRole.roleARN
       - description: Key contains the name of the key inside the referenced Secret.
@@ -1491,7 +1492,7 @@ spec:
         path: outputs[0].s3.authentication.iamRole.token.secret.name
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
-      - description: Type is the type of S3 authentication to configure
+      - description: Type is the type of cloudwatch authentication to configure
         displayName: Authentication Type
         path: outputs[0].s3.authentication.type
       - description: Bucket specifies the S3 bucket name where logs will be stored.
@@ -1516,16 +1517,12 @@ spec:
            - {@timestamp|hour} - HH format
            - {@timestamp|strftime:"%Y-%m-%d"} - Custom strftime format
 
-          Example:
+          Examples ....that don't currently work:
 
            1. foo-{.bar\|\|"none"}
-
            2. {.foo\|\|.bar\|\|"missing"}
-
            3. foo.{.bar.baz\|\|.qux.quux.corge\|\|.grault\|\|"nil"}-waldo.fred{.plugh\|\|"none"}
-
            4. {.kubernetes.namespace_name\|\|"default"}/{@timestamp|date}/
-
            5. logs/{@timestamp|year}/{@timestamp|month}/{@timestamp|day}/
         displayName: Key Prefix
         path: outputs[0].s3.keyPrefix

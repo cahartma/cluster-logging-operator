@@ -1852,7 +1852,7 @@ spec:
                       properties:
                         authentication:
                           description: Authentication sets credentials for authenticating
-                            the requests.
+                            requests to cloudwatch services.
                           properties:
                             assumeRole:
                               description: |-
@@ -1902,7 +1902,7 @@ spec:
                               - roleARN
                               type: object
                             awsAccessKey:
-                              description: AWSAccessKey points to the AWS access key
+                              description: AwsAccessKey points to the AWS access key
                                 id and secret to be used for authentication.
                               nullable: true
                               properties:
@@ -1944,7 +1944,7 @@ spec:
                               type: object
                             iamRole:
                               description: |-
-                                IAMRole points to the secret containing the role ARN to be used for authentication.
+                                IamRole points to the secret containing the role ARN to be used for authentication.
                                 This can be used for authentication in STS-enabled clusters when additionally specifying
                                 a web identity token
                               nullable: true
@@ -3230,9 +3230,9 @@ spec:
                           properties:
                             assumeRole:
                               description: |-
-                                AssumeRole specifies an additional IAM role to assume after the initial authentication.
-                                This enables cross-account log forwarding where the initial role (from IAMRole or AWSAccessKey)
-                                is used to authenticate, and then this role is assumed to access S3 in another account.
+                                AssumeRole specifies an additional AWS role to assume for forwarding logs.
+                                This enables cross-account log forwarding by using the initial role to authenticate,
+                                then assume a role in order to access cross-account services.
                               nullable: true
                               properties:
                                 externalID:
@@ -3276,7 +3276,7 @@ spec:
                               - roleARN
                               type: object
                             awsAccessKey:
-                              description: AWSAccessKey points to the AWS access key
+                              description: AwsAccessKey points to the AWS access key
                                 id and secret to be used for authentication.
                               nullable: true
                               properties:
@@ -3318,15 +3318,15 @@ spec:
                               type: object
                             iamRole:
                               description: |-
-                                IAMRole points to the secret containing the role ARN to be used for authentication.
+                                IamRole points to the secret containing the role ARN to be used for authentication.
                                 This can be used for authentication in STS-enabled clusters when additionally specifying
                                 a web identity token
                               nullable: true
                               properties:
                                 roleARN:
                                   description: |-
-                                    RoleARN points to the secret containing the role ARN to be used for authentication.
-                                    This is used for authentication in STS-enabled clusters.
+                                    RoleARN specifies the secret containing the role ARN to be used for AWS authentication.
+                                    This role requires an OIDC provider to be configured in an STS-enabled cluster.
                                   properties:
                                     key:
                                       description: Key contains the name of the key
@@ -3378,8 +3378,8 @@ spec:
                               - token
                               type: object
                             type:
-                              description: Type is the type of S3 authentication to
-                                configure
+                              description: Type is the type of cloudwatch authentication
+                                to configure
                               enum:
                               - awsAccessKey
                               - iamRole
@@ -3417,16 +3417,12 @@ spec:
                              - {@timestamp|hour} - HH format
                              - {@timestamp|strftime:"%Y-%m-%d"} - Custom strftime format
 
-                            Example:
+                            Examples ....that don't currently work:
 
                              1. foo-{.bar\|\|"none"}
-
                              2. {.foo\|\|.bar\|\|"missing"}
-
                              3. foo.{.bar.baz\|\|.qux.quux.corge\|\|.grault\|\|"nil"}-waldo.fred{.plugh\|\|"none"}
-
                              4. {.kubernetes.namespace_name\|\|"default"}/{@timestamp|date}/
-
                              5. logs/{@timestamp|year}/{@timestamp|month}/{@timestamp|day}/
                           pattern: ^(([a-zA-Z0-9-_.\/])*(\{((\.[a-zA-Z0-9_.]+|\."[^"]+")+((\|\|)(\.[a-zA-Z0-9_.]+|\."[^"]+"))*(\|\|"[^"]*")?|@timestamp\|[a-z]+|@timestamp\|strftime:"[^"]+")\})*)*$
                           type: string

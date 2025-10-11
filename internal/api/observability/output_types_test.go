@@ -37,9 +37,9 @@ var _ = Describe("S3 secret handling", func() {
 			output := obsv1.OutputSpec{
 				Type: obsv1.OutputTypeS3,
 				S3: &obsv1.S3{
-					Authentication: &obsv1.S3Authentication{
-						Type: obsv1.S3AuthTypeAccessKey,
-						AWSAccessKey: &obsv1.S3AWSAccessKey{
+					Authentication: &obsv1.AwsAuthentication{
+						Type: obsv1.AuthTypeAccessKey,
+						AwsAccessKey: &obsv1.AwsAccessKey{
 							KeyId: obsv1.SecretReference{
 								SecretName: "s3-secret1",
 								Key:        "access-key-id",
@@ -65,9 +65,9 @@ var _ = Describe("S3 secret handling", func() {
 			output := obsv1.OutputSpec{
 				Type: obsv1.OutputTypeS3,
 				S3: &obsv1.S3{
-					Authentication: &obsv1.S3Authentication{
-						Type: obsv1.S3AuthTypeIAMRole,
-						IAMRole: &obsv1.S3IAMRole{
+					Authentication: &obsv1.AwsAuthentication{
+						Type: obsv1.AuthTypeIAMRole,
+						IamRole: &obsv1.AwsRole{
 							RoleARN: obsv1.SecretReference{
 								SecretName: "s3-role",
 								Key:        "role-arn",
@@ -90,9 +90,9 @@ var _ = Describe("S3 secret handling", func() {
 			output := obsv1.OutputSpec{
 				Type: obsv1.OutputTypeS3,
 				S3: &obsv1.S3{
-					Authentication: &obsv1.S3Authentication{
-						Type: obsv1.S3AuthTypeIAMRole,
-						IAMRole: &obsv1.S3IAMRole{
+					Authentication: &obsv1.AwsAuthentication{
+						Type: obsv1.AuthTypeIAMRole,
+						IamRole: &obsv1.AwsRole{
 							RoleARN: obsv1.SecretReference{
 								SecretName: "s3-base-role",
 								Key:        "role-arn",
@@ -126,9 +126,9 @@ var _ = Describe("S3 secret handling", func() {
 				obsv1.OutputSpec{
 					Type: obsv1.OutputTypeS3,
 					S3: &obsv1.S3{
-						Authentication: &obsv1.S3Authentication{
-							Type: obsv1.S3AuthTypeIAMRole,
-							IAMRole: &obsv1.S3IAMRole{
+						Authentication: &obsv1.AwsAuthentication{
+							Type: obsv1.AuthTypeIAMRole,
+							IamRole: &obsv1.AwsRole{
 								Token: obsv1.BearerToken{
 									From: obsv1.BearerTokenFromServiceAccount,
 								},
@@ -146,8 +146,8 @@ var _ = Describe("S3 secret handling", func() {
 				obsv1.OutputSpec{
 					Type: obsv1.OutputTypeS3,
 					S3: &obsv1.S3{
-						Authentication: &obsv1.S3Authentication{
-							Type: obsv1.S3AuthTypeAccessKey,
+						Authentication: &obsv1.AwsAuthentication{
+							Type: obsv1.AuthTypeAccessKey,
 						},
 					},
 				},

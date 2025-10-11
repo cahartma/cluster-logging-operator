@@ -1,13 +1,12 @@
 package conf
 
 import (
-	"github.com/openshift/cluster-logging-operator/internal/collector"
 	"github.com/openshift/cluster-logging-operator/internal/collector/vector"
 	"github.com/openshift/cluster-logging-operator/internal/generator/framework"
 	"github.com/openshift/cluster-logging-operator/internal/generator/vector/output/common"
-	"strconv"
 )
 
+// TODO: this needs to be verified
 func Global(namespace, forwarderName string) []framework.Element {
 	dataDir := vector.GetDataPath(namespace, forwarderName)
 	if dataDir == vector.DefaultDataPath {
@@ -41,7 +40,9 @@ data_dir = "{{.DataDir}}"
 
 [api]
 enabled = true
-address = "0.0.0.0:` + strconv.Itoa(int(collector.HealthPort)) + `"
+address = ""
 {{end}}
 `
 }
+
+// This is a temp fix for vector api no longer working

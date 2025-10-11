@@ -236,7 +236,8 @@ func (f *Factory) NewCollectorContainer(inputs internalobs.Inputs, outputs inter
 		AddSecurityContextTo(collector)
 	}
 
-	AddLivenessProbe(collector)
+	// TODO: fix/resolve later with new api port breaking 'vector api'
+	//AddLivenessProbe(collector)
 
 	AddVolumeMounts(collector, secretVolumes, common.SecretBasePath)
 	AddVolumeMounts(collector, configmapVolumes, func(name string) string {

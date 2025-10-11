@@ -349,11 +349,11 @@ type Cloudwatch struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Destination URL",xDescriptors={"urn:alm:descriptor:com.tectonic.ui:text"}
 	URL string `json:"url,omitempty"`
 
-	// Authentication sets credentials for authenticating the requests.
+	// Authentication sets credentials for authenticating requests to cloudwatch services.
 	//
 	// +kubebuilder:validation:Required
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Authentication Options"
-	Authentication *CloudwatchAuthentication `json:"authentication"`
+	Authentication *AwsAuthentication `json:"authentication"`
 
 	// Tuning specs tuning for the output
 	//
@@ -387,44 +387,50 @@ type Cloudwatch struct {
 	GroupName string `json:"groupName"`
 }
 
-// CloudwatchAuthType sets the authentication type used for CloudWatch.
+// AwsAuthType sets the authentication type used for CloudWatch.
 //
 // +kubebuilder:validation:Enum:=awsAccessKey;iamRole
-type CloudwatchAuthType string
+type AwsAuthType string
 
 const (
-	// CloudwatchAuthTypeAccessKey requires auth to use static keys
-	CloudwatchAuthTypeAccessKey CloudwatchAuthType = "awsAccessKey"
+	// AuthTypeAccessKey requires auth to use static keys
+	AuthTypeAccessKey AwsAuthType = "awsAccessKey"
 
-	// CloudwatchAuthTypeIAMRole requires auth to use IAM Role and optional token
-	CloudwatchAuthTypeIAMRole CloudwatchAuthType = "iamRole"
+	// AuthTypeIAMRole requires auth to use IAM Role and optional token
+	AuthTypeIAMRole AwsAuthType = "iamRole"
+
+	//// S3AuthTypeAccessKey requires auth to use static keys
+	//S3AuthTypeAccessKey AwsAuthType = "awsAccessKey"
+	//
+	//// S3AuthTypeIAMRole requires auth to use IAM Role and optional token
+	//S3AuthTypeIAMRole AwsAuthType = "iamRole"
 )
 
-// CloudwatchAuthentication contains configuration for authenticating requests to a Cloudwatch output.
+// AwsAuthentication contains configuration for authenticating requests to a Cloudwatch output.
 // +kubebuilder:validation:XValidation:rule="self.type != 'awsAccessKey' || has(self.awsAccessKey)", message="Additional type specific spec is required for authentication"
 // +kubebuilder:validation:XValidation:rule="self.type != 'iamRole' || has(self.iamRole)", message="Additional type specific spec is required for authentication"
-type CloudwatchAuthentication struct {
+type AwsAuthentication struct {
 	// Type is the type of cloudwatch authentication to configure
 	//
 	// +kubebuilder:validation:Required
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Authentication Type"
-	Type CloudwatchAuthType `json:"type"`
+	Type AwsAuthType `json:"type"`
 
-	// AWSAccessKey points to the AWS access key id and secret to be used for authentication.
+	// AwsAccessKey points to the AWS access key id and secret to be used for authentication.
 	//
 	// +kubebuilder:validation:Optional
 	// +nullable
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Access Key"
-	AWSAccessKey *CloudwatchAWSAccessKey `json:"awsAccessKey,omitempty"`
+	AwsAccessKey *AwsAccessKey `json:"awsAccessKey,omitempty"`
 
-	// IAMRole points to the secret containing the role ARN to be used for authentication.
+	// IamRole points to the secret containing the role ARN to be used for authentication.
 	// This can be used for authentication in STS-enabled clusters when additionally specifying
 	// a web identity token
 	//
 	// +kubebuilder:validation:Optional
 	// +nullable
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Amazon IAM Role"
-	IAMRole *CloudwatchIAMRole `json:"iamRole,omitempty"`
+	IamRole *AwsRole `json:"iamRole,omitempty"`
 
 	// AssumeRole specifies an additional AWS role to assume for forwarding logs.
 	// This enables cross-account log forwarding by using the initial role to authenticate,
@@ -436,7 +442,7 @@ type CloudwatchAuthentication struct {
 	AssumeRole *AwsAssumeRole `json:"assumeRole,omitempty"`
 }
 
-type CloudwatchAWSAccessKey struct {
+type AwsAccessKey struct {
 	// KeyId points to the AWS access key id to be used for authentication.
 	//
 	// +kubebuilder:validation:Required
@@ -450,7 +456,7 @@ type CloudwatchAWSAccessKey struct {
 	KeySecret SecretReference `json:"keySecret"`
 }
 
-type CloudwatchIAMRole struct {
+type AwsRole struct {
 	// RoleARN specifies the secret containing the role ARN to be used for AWS authentication.
 	// This role requires an OIDC provider to be configured in an STS-enabled cluster.
 	//
@@ -1417,7 +1423,7 @@ type S3 struct {
 	//
 	// +kubebuilder:validation:Required
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Authentication Options"
-	Authentication *S3Authentication `json:"authentication"`
+	Authentication *AwsAuthentication `json:"authentication"`
 
 	// Tuning specs tuning for the output
 	//
@@ -1453,16 +1459,12 @@ type S3 struct {
 	//  - {@timestamp|hour} - HH format
 	//  - {@timestamp|strftime:"%Y-%m-%d"} - Custom strftime format
 	//
-	// Example:
+	// Examples ....that don't currently work:
 	//
 	//  1. foo-{.bar\|\|"none"}
-	//
 	//  2. {.foo\|\|.bar\|\|"missing"}
-	//
 	//  3. foo.{.bar.baz\|\|.qux.quux.corge\|\|.grault\|\|"nil"}-waldo.fred{.plugh\|\|"none"}
-	//
 	//  4. {.kubernetes.namespace_name\|\|"default"}/{@timestamp|date}/
-	//
 	//  5. logs/{@timestamp|year}/{@timestamp|month}/{@timestamp|day}/
 	//
 	// +kubebuilder:validation:Pattern:=`^(([a-zA-Z0-9-_.\/])*(\{((\.[a-zA-Z0-9_.]+|\."[^"]+")+((\|\|)(\.[a-zA-Z0-9_.]+|\."[^"]+"))*(\|\|"[^"]*")?|@timestamp\|[a-z]+|@timestamp\|strftime:"[^"]+")\})*)*$`
@@ -1478,6 +1480,7 @@ type S3 struct {
 	URL string `json:"url,omitempty"`
 }
 
+/*
 // S3AuthType sets the authentication type used for S3.
 //
 // +kubebuilder:validation:Enum:=awsAccessKey;iamRole
@@ -1490,6 +1493,7 @@ const (
 	// S3AuthTypeIAMRole requires auth to use IAM Role and optional token
 	S3AuthTypeIAMRole S3AuthType = "iamRole"
 )
+
 
 // S3Authentication contains configuration for authenticating requests to an S3 output.
 // +kubebuilder:validation:XValidation:rule="self.type != 'awsAccessKey' || has(self.awsAccessKey)", message="Additional type specific spec is required for authentication"
@@ -1524,7 +1528,7 @@ type S3Authentication struct {
 	// +kubebuilder:validation:Optional
 	// +nullable
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Cross-Account Assume Role"
-	AssumeRole *AwsAssumeRole `json:"assumeRole,omitempty"`
+	AssumeRole *AssumeRole `json:"assumeRole,omitempty"`
 }
 
 type S3IAMRole struct {
@@ -1555,3 +1559,4 @@ type S3AWSAccessKey struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Secret with Access Key Secret"
 	KeySecret SecretReference `json:"keySecret"`
 }
+*/

@@ -2,6 +2,7 @@ package s3
 
 import (
 	_ "embed"
+	cloudwatch2 "github.com/openshift/cluster-logging-operator/internal/collector/cloudwatch"
 	"strings"
 
 	"github.com/openshift/cluster-logging-operator/internal/api/observability"
@@ -137,20 +138,30 @@ func sink(id string, o obs.OutputSpec, inputs []string, secrets observability.Se
 
 func authConfig(outputName string, auth *obs.S3Authentication, options Options) Element {
 	authConfig := NewAuth()
-	if auth != nil && auth.Type == obs.S3AuthTypeAccessKey {
+	if auth == nil {
+		return authConfig
+	}
+	switch auth.Type {
+	case obs.S3AuthTypeAccessKey:
 		authConfig.KeyID.Value = vectorhelpers.SecretFrom(&auth.AWSAccessKey.KeyId)
 		authConfig.KeySecret.Value = vectorhelpers.SecretFrom(&auth.AWSAccessKey.KeySecret)
-	} else if auth != nil && auth.Type == obs.S3AuthTypeIAMRole {
+		// New assumeRole works with static keys as well
+		if auth.AssumeRole != nil {
+			authConfig.AssumeRole.Value = vectorhelpers.SecretFrom(&auth.AssumeRole.RoleARN)
+			// Optional externalID
+			if hasExtID, extID := cloudwatch2.AssumeRoleHasExternalId(auth.AssumeRole); hasExtID {
+				authConfig.ExternalID.Value = extID
+			}
+			if auth.AssumeRole.SessionName != "" {
+				authConfig.SessionName.Value = auth.AssumeRole.SessionName
+			}
+		}
+	case obs.S3AuthTypeIAMRole:
 		if forwarderName, found := utils.GetOption(options, framework.OptionForwarderName, ""); found {
 			authConfig.CredentialsPath.Value = strings.Trim(vectorhelpers.ConfigPath(forwarderName+"-"+constants.AWSCredentialsConfigMapName, constants.AWSCredentialsKey), `"`)
 			authConfig.Profile.Value = "output_" + outputName
 		}
 	}
-
-	// Note: Assume role configuration is handled entirely through the AWS credentials file
-	// when using credentials_file + profile authentication method. The credentials file
-	// will contain the source_profile and role_arn for assume role operations.
-
 	return authConfig
 }
 

@@ -131,6 +131,10 @@ func authConfig(outputName string, auth *obs.CloudwatchAuthentication, options O
 			if hasExtID, extID := cloudwatch2.AssumeRoleHasExternalId(auth.AssumeRole); hasExtID {
 				authConfig.ExternalID.Value = extID
 			}
+			//TODO: suppose need to add sessionName here as well??
+			if auth.AssumeRole.SessionName != "" {
+				authConfig.SessionName.Value = auth.AssumeRole.SessionName
+			}
 		}
 	case obs.CloudwatchAuthTypeIAMRole:
 		if forwarderName, found := utils.GetOption(options, OptionForwarderName, ""); found {

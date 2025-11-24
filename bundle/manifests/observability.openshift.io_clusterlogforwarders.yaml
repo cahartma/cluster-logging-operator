@@ -2045,27 +2045,55 @@ spec:
                           - message: Additional type specific spec is required for
                               authentication
                             rule: self.type != 'iamRole' || has(self.iamRole)
+                        groupClass:
+                          default: standard
+                          description: |-
+                            GroupClass defines the log class to be used when creating a log group for the first time.
+                            Allowed values are "standard" and "infrequent_access"
+
+                            The log group class cannot be changed once the group is created.
+
+                            NOTE: The "delivery" log class is not supported due to its limited feature set and complex constraints
+                          enum:
+                          - standard
+                          - infrequent_access
+                          - infrequentAccess
+                          type: string
                         groupName:
                           description: |-
                             GroupName defines the strategy for grouping logstreams
 
-                            The GroupName can be a combination of static and dynamic values consisting of field paths followed by "\|\|" followed by another field path or a static value.
+                            The GroupName can be a combination of static and dynamic values consisting of field paths followed by "||" followed by another field path or a static value.
 
-                            A dynamic value is encased in single curly brackets "{}" and MUST end with a static fallback value separated with "\|\|".
+                            A dynamic value is encased in single curly brackets "{}" and MUST end with a static fallback value separated with "||".
 
                             Static values can only contain alphanumeric characters along with dashes, underscores, dots and forward slashes.
 
                             Example:
 
                              1. foo-{.bar\|\|"none"}
-
                              2. {.foo\|\|.bar\|\|"missing"}
-
                              3. foo.{.bar.baz\|\|.qux.quux.corge\|\|.grault\|\|"nil"}-waldo.fred{.plugh\|\|"none"}
                           pattern: ^(([a-zA-Z0-9-_.\/])*(\{(\.[a-zA-Z0-9_]+|\."[^"]+")+((\|\|)(\.[a-zA-Z0-9_]+|\.?"[^"]+")+)*\|\|"[^"]*"\})*)*$
                           type: string
                         region:
                           type: string
+                        tags:
+                          additionalProperties:
+                            type: string
+                          description: |-
+                            Tags is a map of key-value pairs that are applied to the CloudWatch log group.
+                            /*  OPTIONALLY??
+                            The values can be a combination of static and dynamic values, using the same
+                            templating syntax as GroupName.
+
+                            The map key must be a valid AWS Tag key.
+                            The map value must follow the same pattern as GroupName.
+                            NOTE: kubebuilder doesn't directly validate map values in this way
+                            */
+                          maxProperties: 10
+                          nullable: true
+                          type: object
                         tuning:
                           description: Tuning specs tuning for the output
                           nullable: true

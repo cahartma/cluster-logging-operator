@@ -106,6 +106,7 @@ func New(id string, o obs.OutputSpec, inputs []string, secrets observability.Sec
 	return []Element{
 		template.TemplateRemap(keyPrefixID, inputs, o.S3.KeyPrefix, keyPrefixID, "S3 Key Prefix"),
 		sink,
+		aws.NewTags(id, o.Cloudwatch),
 		common.NewEncoding(id, common.CodecJSON),
 		common.NewAcknowledgments(id, strategy),
 		common.NewBatch(id, strategy),

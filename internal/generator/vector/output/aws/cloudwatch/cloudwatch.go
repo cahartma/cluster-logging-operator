@@ -17,6 +17,67 @@ import (
 	commontemplate "github.com/openshift/cluster-logging-operator/internal/generator/vector/output/common/template"
 )
 
+const (
+	StandardGroupClass         = "standard"
+	InfrequentGroupClass       = "infrequent_access"
+	InfrequentGroupClassLegacy = "infrequentAccess"
+)
+
+type CloudWatch struct {
+	Desc             string
+	ComponentID      string
+	Inputs           string
+	Region           string
+	GroupName        string
+	GroupClassConfig Element
+	EndpointConfig   Element
+	AuthConfig       Element
+	common.RootMixin
+}
+
+func (c CloudWatch) Name() string {
+	return "cloudwatchTemplate"
+}
+
+func (c CloudWatch) Template() string {
+	return `{{define "` + c.Name() + `" -}}
+{{if .Desc -}}
+# {{.Desc}}
+{{end -}}
+[sinks.{{.ComponentID}}]
+type = "aws_cloudwatch_logs"
+inputs = {{.Inputs}}
+region = "{{.Region}}"
+{{.Compression}}
+group_name = "{{"{{"}} _internal.{{.GroupName}} {{"}}"}}"
+{{compose_one .GroupClassConfig}}
+# TESTING
+# TESTING
+stream_name = "{{"{{ stream_name }}"}}"
+{{compose_one .AuthConfig}}
+healthcheck.enabled = false
+{{compose_one .EndpointConfig}}
+{{- end}}
+`
+}
+
+type LogGroupClass struct {
+	GroupClass string
+}
+
+func (g LogGroupClass) Name() string {
+	return "awsLogGroupClassTemplate"
+}
+
+func (g LogGroupClass) Template() (ret string) {
+	ret = `{{define "` + g.Name() + `" -}}`
+	if g.GroupClass != "" {
+		ret += `log_group_class = "{{ .GroupClass }}"`
+	}
+	ret += `{{end}}`
+	return
+}
+
 type Endpoint struct {
 	URL string
 }
@@ -34,42 +95,8 @@ func (e Endpoint) Template() (ret string) {
 	return
 }
 
-type CloudWatch struct {
-	Desc           string
-	ComponentID    string
-	Inputs         string
-	Region         string
-	GroupName      string
-	EndpointConfig Element
-	AuthConfig     Element
-	common.RootMixin
-}
-
-func (e CloudWatch) Name() string {
-	return "cloudwatchTemplate"
-}
-
-func (e CloudWatch) Template() string {
-	return `{{define "` + e.Name() + `" -}}
-{{if .Desc -}}
-# {{.Desc}}
-{{end -}}
-[sinks.{{.ComponentID}}]
-type = "aws_cloudwatch_logs"
-inputs = {{.Inputs}}
-region = "{{.Region}}"
-{{.Compression}}
-group_name = "{{"{{"}} _internal.{{.GroupName}} {{"}}"}}"
-stream_name = "{{"{{ stream_name }}"}}"
-{{compose_one .AuthConfig}}
-healthcheck.enabled = false
-{{compose_one .EndpointConfig}}
-{{- end}}
-`
-}
-
-func (e *CloudWatch) SetCompression(algo string) {
-	e.Compression.Value = algo
+func (c *CloudWatch) SetCompression(algo string) {
+	c.Compression.Value = algo
 }
 
 func New(id string, o obs.OutputSpec, inputs []string, secrets observability.Secrets, strategy common.ConfigStrategy, op Options) []Element {
@@ -81,6 +108,7 @@ func New(id string, o obs.OutputSpec, inputs []string, secrets observability.Sec
 			Debug(id, vectorhelpers.MakeInputs([]string{componentID}...)),
 		}
 	}
+
 	cwSink := sink(id, o, []string{groupNameID}, secrets, op, o.Cloudwatch.Region, groupNameID)
 	if strategy != nil {
 		strategy.VisitSink(cwSink)
@@ -88,8 +116,9 @@ func New(id string, o obs.OutputSpec, inputs []string, secrets observability.Sec
 
 	return []Element{
 		NormalizeStreamName(componentID, inputs),
-		commontemplate.TemplateRemap(groupNameID, []string{componentID}, o.Cloudwatch.GroupName, groupNameID, "Cloudwatch Groupname"),
+		commontemplate.TemplateRemap(groupNameID, []string{componentID}, o.Cloudwatch.GroupName, groupNameID, "Cloudwatch GroupName"),
 		cwSink,
+		aws.NewTags(id, o.Cloudwatch),
 		common.NewEncoding(id, common.CodecJSON),
 		common.NewAcknowledgments(id, strategy),
 		common.NewBatch(id, strategy),
@@ -101,14 +130,15 @@ func New(id string, o obs.OutputSpec, inputs []string, secrets observability.Sec
 
 func sink(id string, o obs.OutputSpec, inputs []string, secrets observability.Secrets, op Options, region, groupName string) *CloudWatch {
 	return &CloudWatch{
-		Desc:           "Cloudwatch Logs",
-		ComponentID:    id,
-		Inputs:         vectorhelpers.MakeInputs(inputs...),
-		Region:         region,
-		GroupName:      groupName,
-		AuthConfig:     aws.AuthConfig(o.Name, o.Cloudwatch.Authentication, op, secrets),
-		EndpointConfig: endpointConfig(o.Cloudwatch),
-		RootMixin:      common.NewRootMixin("none"),
+		Desc:             "Cloudwatch Logs",
+		ComponentID:      id,
+		Inputs:           vectorhelpers.MakeInputs(inputs...),
+		Region:           region,
+		GroupName:        groupName,
+		GroupClassConfig: groupClassConfig(o.Cloudwatch),
+		AuthConfig:       aws.AuthConfig(o.Name, o.Cloudwatch.Authentication, op, secrets),
+		EndpointConfig:   endpointConfig(o.Cloudwatch),
+		RootMixin:        common.NewRootMixin("none"),
 	}
 }
 
@@ -118,6 +148,31 @@ func endpointConfig(cw *obs.Cloudwatch) Element {
 	}
 	return Endpoint{
 		URL: cw.URL,
+	}
+}
+
+func groupClassConfig(cw *obs.Cloudwatch) Element {
+	if cw == nil {
+		return LogGroupClass{}
+	}
+
+	//// TODO: avoid regex
+	//regex := regexp.MustCompile("([a-z0-9])([A-Z])")
+	//underscored := regex.ReplaceAllString(cw.GroupClass, "${1}_${2}")
+	//return LogGroupClass{
+	//	GroupClass: strings.ToLower(underscored),
+	//}
+
+	// There is only one value that needs to be changed for vector, is it worth it?
+	//// This is solely for consistency as we are allowing camel-case to be consistent with our older enums
+	//// I've added the to_upper() to be handled within the vector aws client changes I made
+	val := cw.GroupClass
+	if val == InfrequentGroupClassLegacy {
+		val = InfrequentGroupClass
+	}
+
+	return LogGroupClass{
+		GroupClass: val,
 	}
 }
 

@@ -549,18 +549,16 @@ spec:
       - description: |-
           GroupName defines the strategy for grouping logstreams
 
-          The GroupName can be a combination of static and dynamic values consisting of field paths followed by "\|\|" followed by another field path or a static value.
+          The GroupName can be a combination of static and dynamic values consisting of field paths followed by "||" followed by another field path or a static value.
 
-          A dynamic value is encased in single curly brackets "{}" and MUST end with a static fallback value separated with "\|\|".
+          A dynamic value is encased in single curly brackets "{}" and MUST end with a static fallback value separated with "||".
 
           Static values can only contain alphanumeric characters along with dashes, underscores, dots and forward slashes.
 
           Example:
 
            1. foo-{.bar\|\|"none"}
-
            2. {.foo\|\|.bar\|\|"missing"}
-
            3. foo.{.bar.baz\|\|.qux.quux.corge\|\|.grault\|\|"nil"}-waldo.fred{.plugh\|\|"none"}
         displayName: Group Name
         path: outputs[0].cloudwatch.groupName
@@ -570,6 +568,18 @@ spec:
         path: outputs[0].cloudwatch.region
         x-descriptors:
         - urn:alm:descriptor:com.tectonic.ui:text
+      - description: |-
+          Tags is a map of key-value pairs that are applied to the CloudWatch log group.
+          /*  OPTIONALLY??
+          The values can be a combination of static and dynamic values, using the same
+          templating syntax as GroupName.
+
+          The map key must be a valid AWS Tag key.
+          The map value must follow the same pattern as GroupName.
+          NOTE: kubebuilder doesn't directly validate map values in this way
+          */
+        displayName: User-Defined Tags
+        path: outputs[0].cloudwatch.tags
       - description: Tuning specs tuning for the output
         displayName: Tuning Options
         path: outputs[0].cloudwatch.tuning

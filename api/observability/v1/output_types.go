@@ -372,23 +372,50 @@ type Cloudwatch struct {
 
 	// GroupName defines the strategy for grouping logstreams
 	//
-	// The GroupName can be a combination of static and dynamic values consisting of field paths followed by "\|\|" followed by another field path or a static value.
+	// The GroupName can be a combination of static and dynamic values consisting of field paths followed by "||" followed by another field path or a static value.
 	//
-	// A dynamic value is encased in single curly brackets "{}" and MUST end with a static fallback value separated with "\|\|".
+	// A dynamic value is encased in single curly brackets "{}" and MUST end with a static fallback value separated with "||".
 	//
 	// Static values can only contain alphanumeric characters along with dashes, underscores, dots and forward slashes.
 	//
 	// Example:
 	//
 	//  1. foo-{.bar\|\|"none"}
-	//
 	//  2. {.foo\|\|.bar\|\|"missing"}
-	//
 	//  3. foo.{.bar.baz\|\|.qux.quux.corge\|\|.grault\|\|"nil"}-waldo.fred{.plugh\|\|"none"}
 	//
 	// +kubebuilder:validation:Pattern:=`^(([a-zA-Z0-9-_.\/])*(\{(\.[a-zA-Z0-9_]+|\."[^"]+")+((\|\|)(\.[a-zA-Z0-9_]+|\.?"[^"]+")+)*\|\|"[^"]*"\})*)*$`
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Group Name",xDescriptors={"urn:alm:descriptor:com.tectonic.ui:text"}
 	GroupName string `json:"groupName"`
+
+	// GroupClass defines the log class to be used when creating a log group for the first time.
+	// Allowed values are "standard" and "infrequent_access"
+	//
+	// The log group class cannot be changed once the group is created.
+	//
+	// NOTE: The "delivery" log class is not supported due to its limited feature set and complex constraints
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=standard
+	// +kubebuilder:validation:Enum=standard;infrequent_access;infrequentAccess
+	GroupClass string `json:"groupClass,omitempty"`
+
+	// Tags is a map of key-value pairs that are applied to the CloudWatch log group.
+	//
+	///*  OPTIONALLY??
+	// The values can be a combination of static and dynamic values, using the same
+	// templating syntax as GroupName.
+	//
+	// The key must be a valid AWS Tag key.
+	// The value must follow the same pattern as GroupName.
+	// NOTE: kubebuilder doesn't directly validate map values in this way
+	//*/
+	//
+	// +kubebuilder:validation:Optional
+	// +nullable
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="User-Defined Tags"
+	// +kubebuilder:validation:MaxProperties:=10
+	Tags map[string]string `json:"tags,omitempty"`
 }
 
 // AwsAuthType sets the authentication type used for CloudWatch.
@@ -1473,4 +1500,21 @@ type S3 struct {
 	// +kubebuilder:validation:Optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Custom Endpoint URL",xDescriptors={"urn:alm:descriptor:com.tectonic.ui:text"}
 	URL string `json:"url,omitempty"`
+
+	// Tags is a map of key-value pairs that are applied to the CloudWatch log group.
+	//
+	///*  OPTIONALLY??
+	// The values can be a combination of static and dynamic values, using the same
+	// templating syntax as GroupName.
+	//
+	// The key must be a valid AWS Tag key.
+	// The value must follow the same pattern as GroupName.
+	// NOTE: kubebuilder doesn't directly validate map values in this way
+	//*/
+	//
+	// +kubebuilder:validation:Optional
+	// +nullable
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="User-Defined Tags"
+	// +kubebuilder:validation:MaxProperties:=10
+	Tags map[string]string `json:"tags,omitempty"`
 }
